@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		603067652D5E605000DD1670 /* Attendancemanager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603067642D5E605000DD1670 /* Attendancemanager.swift */; };
+		603067652D5E605000DD1670 /* AttendanceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603067642D5E605000DD1670 /* AttendanceManager.swift */; };
 		603067672D5E639900DD1670 /* AttendanceRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603067662D5E639900DD1670 /* AttendanceRecordsView.swift */; };
+		6054B2422D6146EE00F52165 /* LoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6054B2412D6146EE00F52165 /* LoginManager.swift */; };
+		6054B2442D61471A00F52165 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6054B2432D61471A00F52165 /* LoginView.swift */; };
 		F51C38D22C775953003B4EB3 /* CoreNFC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F51C38D02C77594E003B4EB3 /* CoreNFC.framework */; };
 		F51C38D72C775CAF003B4EB3 /* AppBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51C38D62C775CAF003B4EB3 /* AppBlocker.swift */; };
 		F51C38D92C775CEC003B4EB3 /* NfcReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51C38D82C775CEC003B4EB3 /* NfcReader.swift */; };
@@ -23,8 +25,10 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		603067642D5E605000DD1670 /* Attendancemanager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attendancemanager.swift; sourceTree = "<group>"; };
+		603067642D5E605000DD1670 /* AttendanceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendanceManager.swift; sourceTree = "<group>"; };
 		603067662D5E639900DD1670 /* AttendanceRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendanceRecordsView.swift; sourceTree = "<group>"; };
+		6054B2412D6146EE00F52165 /* LoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginManager.swift; sourceTree = "<group>"; };
+		6054B2432D61471A00F52165 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		F51C38D02C77594E003B4EB3 /* CoreNFC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreNFC.framework; path = System/Library/Frameworks/CoreNFC.framework; sourceTree = SDKROOT; };
 		F51C38D52C775AAF003B4EB3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F51C38D62C775CAF003B4EB3 /* AppBlocker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBlocker.swift; sourceTree = "<group>"; };
@@ -89,11 +93,13 @@
 				F51C38DA2C775D0B003B4EB3 /* BrockerView.swift */,
 				603067662D5E639900DD1670 /* AttendanceRecordsView.swift */,
 				F51C38D82C775CEC003B4EB3 /* NfcReader.swift */,
-				603067642D5E605000DD1670 /* Attendancemanager.swift */,
+				603067642D5E605000DD1670 /* AttendanceManager.swift */,
 				F51C38D62C775CAF003B4EB3 /* AppBlocker.swift */,
 				F5A3B0622C733E3500BD6C7F /* Assets.xcassets */,
 				F5A3B0642C733E3500BD6C7F /* Preview Content */,
 				F51C38E92C78B47A003B4EB3 /* ProfileFormView.swift */,
+				6054B2412D6146EE00F52165 /* LoginManager.swift */,
+				6054B2432D61471A00F52165 /* LoginView.swift */,
 			);
 			path = Broke;
 			sourceTree = "<group>";
@@ -187,8 +193,10 @@
 				F51C38D92C775CEC003B4EB3 /* NfcReader.swift in Sources */,
 				603067672D5E639900DD1670 /* AttendanceRecordsView.swift in Sources */,
 				F51C38E12C77DADA003B4EB3 /* ProfileManager.swift in Sources */,
-				603067652D5E605000DD1670 /* Attendancemanager.swift in Sources */,
+				6054B2422D6146EE00F52165 /* LoginManager.swift in Sources */,
+				603067652D5E605000DD1670 /* AttendanceManager.swift in Sources */,
 				F5A3B05F2C733E3400BD6C7F /* BrokeApp.swift in Sources */,
+				6054B2442D61471A00F52165 /* LoginView.swift in Sources */,
 				F51C38E82C78ADB5003B4EB3 /* ProfilePicker.swift in Sources */,
 				F51C38D72C775CAF003B4EB3 /* AppBlocker.swift in Sources */,
 			);

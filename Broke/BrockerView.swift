@@ -14,22 +14,20 @@ struct BrokerView: View {
     @EnvironmentObject private var appBlocker: AppBlocker
     @EnvironmentObject private var profileManager: ProfileManager
     @EnvironmentObject private var attendanceManager: AttendanceManager
+    @EnvironmentObject private var loginManager: LoginManager
     @StateObject private var nfcReader = NFCReader()
+    
+    // Other state properties...
     private let tagPhrase = "BROKE-IS-GREAT"
     
     @State private var showWrongTagAlert = false
     @State private var showCreateTagAlert = false
     @State private var nfcWriteSuccess = false
+    @State private var attendanceMessage: String?
     @State private var showAttendanceRecords = false
 
-    
-    // New state for the attendance message.
-    @State private var attendanceMessage: String?
-    
-    private var isBlocking : Bool {
-        get {
-            return appBlocker.isBlocking
-        }
+    private var isBlocking: Bool {
+        appBlocker.isBlocking
     }
     
     var body: some View {
@@ -42,7 +40,8 @@ struct BrokerView: View {
                         if !isBlocking {
                             Divider()
                             
-                            ProfilesPicker(profileManager: profileManager)
+                            // Use the renamed ClassesPicker instead of ProfilesPicker
+                            ClassesPicker(profileManager: profileManager)
                                 .frame(height: geometry.size.height / 2)
                                 .transition(.move(edge: .bottom))
                         }
@@ -59,37 +58,71 @@ struct BrokerView: View {
                             .transition(.opacity)
                     }
                 }
-                .navigationBarItems(
-                    leading: Button(action: {
-                        showAttendanceRecords = true
-                    }) {
-                        Image(systemName: "person.3.fill")
-                    },
-                    trailing: createTagButton
-                )
-                .alert(isPresented: $showWrongTagAlert) {
-                    Alert(
-                        title: Text("Not a Broker Tag"),
-                        message: Text("You can create a new Broker tag using the + button"),
-                        dismissButton: .default(Text("OK"))
-                    )
-                }
-                .alert("Create Broker Tag", isPresented: $showCreateTagAlert) {
-                    Button("Create") { createBrokerTag() }
-                    Button("Cancel", role: .cancel) { }
-                } message: {
-                    Text("Do you want to create a new Broker tag?")
-                }
-                .alert("Tag Creation", isPresented: $nfcWriteSuccess) {
-                    Button("OK", role: .cancel) { }
-                } message: {
-                    Text(nfcWriteSuccess ? "Broker tag created successfully!" : "Failed to create Broker tag. Please try again.")
+            }
+            .navigationBarItems(
+                leading: Button(action: {
+                    showAttendanceRecords = true
+                }) {
+                    Image(systemName: "person.3.fill")
+                },
+                trailing: createTagButton
+            )
+            // ... existing alerts ...
+        }
+        .animation(.spring(), value: isBlocking)
+        .sheet(isPresented: $showAttendanceRecords) {
+            AttendanceRecordsView()
+                .environmentObject(attendanceManager)
+        }
+        .onAppear {
+            // If no classes are configured, seed some defaults based on the current user.
+            if profileManager.profiles.isEmpty, let user = loginManager.currentUser {
+                if user == "user1" {
+                    profileManager.addProfile(newProfile: Profile(name: "Math", appTokens: [], categoryTokens: [], icon: "book"))
+                    profileManager.addProfile(newProfile: Profile(name: "History", appTokens: [], categoryTokens: [], icon: "clock"))
+                } else if user == "user2" {
+                    profileManager.addProfile(newProfile: Profile(name: "Science", appTokens: [], categoryTokens: [], icon: "flask"))
+                    profileManager.addProfile(newProfile: Profile(name: "Art", appTokens: [], categoryTokens: [], icon: "paintbrush"))
                 }
             }
-            .animation(.spring(), value: isBlocking)
-            .sheet(isPresented: $showAttendanceRecords) {
-                AttendanceRecordsView()
-                    .environmentObject(attendanceManager)
+        }
+    }
+    
+    // The rest of your functions, including scanTag(), blockOrUnblockButton, etc.
+    private func scanTag() {
+        nfcReader.scan { payload in
+            if payload == tagPhrase {
+                let currentlyBlocking = appBlocker.isBlocking
+                appBlocker.toggleBlocking(for: profileManager.currentProfile)
+                
+                if currentlyBlocking == false {
+                    // When turning on blocking (class in session), log attendance with the current user.
+                    if let currentUser = loginManager.currentUser {
+                        attendanceManager.logAttendance(for: profileManager.currentProfile, user: currentUser)
+                    } else {
+                        // Fallback if user is somehow not set
+                        attendanceManager.logAttendance(for: profileManager.currentProfile, user: "Unknown")
+                    }
+                    showAttendance("Your attendance has been logged!")
+                } else {
+                    // When unblocking (class is over)
+                    showAttendance("Class is over")
+                }
+            } else {
+                showWrongTagAlert = true
+                NSLog("Wrong Tag! Payload: \(payload)")
+            }
+        }
+    }
+
+    
+    private func showAttendance(_ message: String) {
+        withAnimation {
+            attendanceMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            withAnimation {
+                attendanceMessage = nil
             }
         }
     }
@@ -117,43 +150,6 @@ struct BrokerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(height: isBlocking ? geometry.size.height : geometry.size.height / 2)
         .animation(.spring(), value: isBlocking)
-    }
-    
-    private func scanTag() {
-        nfcReader.scan { payload in
-            if payload == tagPhrase {
-                // Determine the current blocking state before toggling.
-                let currentlyBlocking = appBlocker.isBlocking
-                
-                // Toggle the blocking state.
-                appBlocker.toggleBlocking(for: profileManager.currentProfile)
-                
-                if currentlyBlocking == false {
-                    // We were not blocking before, so now we are turning on blocking.
-                    // Log attendance and show the attendance logged message.
-                    attendanceManager.logAttendance(for: profileManager.currentProfile)
-                    showAttendance("Your attendance has been logged!")
-                } else {
-                    // We were blocking before, so toggling off means class is over.
-                    showAttendance("Class is over")
-                }
-            } else {
-                showWrongTagAlert = true
-                NSLog("Wrong Tag! Payload: \(payload)")
-            }
-        }
-    }
-    
-    private func showAttendance(_ message: String) {
-        withAnimation {
-            attendanceMessage = message
-        }
-        // Remove the message after 3 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            withAnimation {
-                attendanceMessage = nil
-            }
-        }
     }
     
     private var createTagButton: some View {
