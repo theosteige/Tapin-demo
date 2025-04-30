@@ -117,7 +117,8 @@ struct AttendanceRecordsView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Clear") {
                         // Consider confirmation dialog
-                        attendanceManager.records.removeAll()
+                        // Call the manager's clear function for persistence
+                        attendanceManager.clearRecords()
                     }
                     // Only allow moderator to clear
                     .disabled(loginManager.currentUserRole != .moderator)

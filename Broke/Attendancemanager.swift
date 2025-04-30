@@ -42,11 +42,12 @@ struct AttendanceRecord: Identifiable, Codable {
     let className: String  // Renamed from profileName to className
     let date: Date
 
-    init(username: String, className: String) {
+    // Updated initializer to accept an optional date, defaulting to now
+    init(username: String, className: String, date: Date = Date()) {
         self.id = UUID()
         self.username = username
         self.className = className
-        self.date = Date()
+        self.date = date // Use the provided or default date
     }
 }
 
@@ -55,9 +56,39 @@ class AttendanceManager: ObservableObject {
     @Published var records: [AttendanceRecord] = []
     
     // Updated function to accept a username in addition to the class (profile).
+    // This will automatically use the current date via the default parameter in AttendanceRecord init
     func logAttendance(for profile: Profile, user: String) {
         let record = AttendanceRecord(username: user, className: profile.name)
         records.append(record)
+        // Persist records here if needed
         print("Logged attendance for user \(user) in class \(profile.name) at \(record.date)")
+        saveRecords() // Example: Call save after logging
+    }
+    
+    // Add functions to load/save records (example using UserDefaults)
+    init() {
+        loadRecords()
+    }
+
+    func saveRecords() {
+        if let encoded = try? JSONEncoder().encode(records) {
+            UserDefaults.standard.set(encoded, forKey: "attendanceRecords")
+        }
+    }
+
+    func loadRecords() {
+        if let savedRecords = UserDefaults.standard.data(forKey: "attendanceRecords"),
+           let decodedRecords = try? JSONDecoder().decode([AttendanceRecord].self, from: savedRecords) {
+            records = decodedRecords
+            return
+        }
+        // Initialize with empty array if no saved data
+        records = []
+    }
+    
+    // Function to clear records (potentially add confirmation)
+    func clearRecords() {
+        records.removeAll()
+        saveRecords()
     }
 }
