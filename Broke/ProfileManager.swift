@@ -33,6 +33,15 @@ class ProfileManager: ObservableObject {
             currentProfileId = defaultProfile.id
         }
         
+        // Ensure all loaded profiles have the userSelectsApps field (defaulting to false if missing)
+        profiles = profiles.map { profile in
+            var mutableProfile = profile
+            if mutableProfile.userSelectsApps == nil {
+                mutableProfile.userSelectsApps = false
+            }
+            return mutableProfile
+        }
+
         if let savedProfileId = UserDefaults.standard.string(forKey: "currentProfileId"),
            let uuid = UUID(uuidString: savedProfileId) {
             currentProfileId = uuid
@@ -51,7 +60,7 @@ class ProfileManager: ObservableObject {
     }
     
     func addProfile(name: String, icon: String = "bell.slash") {
-        let newProfile = Profile(name: name, appTokens: [], categoryTokens: [], icon: icon)
+        let newProfile = Profile(name: name, appTokens: [], categoryTokens: [], icon: icon, userSelectsApps: false)
         profiles.append(newProfile)
         currentProfileId = newProfile.id
         saveProfiles()
@@ -126,7 +135,8 @@ class ProfileManager: ObservableObject {
         appTokens: Set<ApplicationToken>? = nil,
         categoryTokens: Set<ActivityCategoryToken>? = nil,
         icon: String? = nil,
-        assignedUsernames: [String]? = nil
+        assignedUsernames: [String]? = nil,
+        userSelectsApps: Bool? = nil
     ) {
         if let index = profiles.firstIndex(where: { $0.id == id }) {
             if let name = name {
@@ -144,6 +154,9 @@ class ProfileManager: ObservableObject {
             if let assignedUsernames = assignedUsernames {
                 profiles[index].assignedUsernames = assignedUsernames
             }
+            if let userSelectsApps = userSelectsApps {
+                profiles[index].userSelectsApps = userSelectsApps
+            }
             
             if currentProfileId == id {
                 currentProfileId = profiles[index].id
@@ -155,7 +168,7 @@ class ProfileManager: ObservableObject {
     
     private func ensureDefaultProfile() {
         if profiles.isEmpty {
-            let defaultProfile = Profile(name: "Default", appTokens: [], categoryTokens: [], icon: "bell.slash")
+            let defaultProfile = Profile(name: "Default", appTokens: [], categoryTokens: [], icon: "bell.slash", userSelectsApps: false)
             profiles.append(defaultProfile)
             currentProfileId = defaultProfile.id
             saveProfiles()
@@ -177,18 +190,20 @@ struct Profile: Identifiable, Codable {
     var categoryTokens: Set<ActivityCategoryToken>
     var icon: String // New property for icon
     var assignedUsernames: [String]? // Added field for assigned usernames
+    var userSelectsApps: Bool? = false // NEW: Determines who selects apps (default false)
 
     var isDefault: Bool {
         name == "Default"
     }
 
     // New initializer to support default icon and assignedUsernames
-    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", assignedUsernames: [String]? = nil) { // Added assignedUsernames
+    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", assignedUsernames: [String]? = nil, userSelectsApps: Bool? = false) { // Added assignedUsernames and userSelectsApps
         self.id = UUID()
         self.name = name
         self.appTokens = appTokens
         self.categoryTokens = categoryTokens
         self.icon = icon
         self.assignedUsernames = assignedUsernames // Initialize assignedUsernames
+        self.userSelectsApps = userSelectsApps ?? false // Initialize userSelectsApps, defaulting to false
     }
 }

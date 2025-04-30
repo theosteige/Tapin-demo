@@ -15,9 +15,50 @@ struct AttendanceRecordsView: View {
     // Group records by day (start of day)
     private var recordsByDay: [Date: [AttendanceRecord]] {
         Dictionary(grouping: attendanceManager.records) { record in
-            Calendar.current.startOfDay(for: record.date)
+            Calendar.current.startOfDay(for: record.startTime) // Use startTime for grouping
         }
     }
+
+    // Calculate aggregated task durations for the selected date
+    private var taskDurationsForSelectedDate: [String: TimeInterval] {
+        guard let date = selectedDate, let recordsForDay = recordsByDay[date] else {
+            return [:]
+        }
+        
+        var durations: [String: TimeInterval] = [:]
+        
+        for record in recordsForDay {
+            guard let task = record.taskDescription, !task.isEmpty, let endTime = record.endTime else {
+                continue // Skip records without a task or end time
+            }
+            let duration = endTime.timeIntervalSince(record.startTime)
+            durations[task, default: 0] += duration
+        }
+        
+        return durations
+    }
+    
+    // Calculate aggregated task durations across ALL records
+    private var totalTaskDurations: [String: TimeInterval] {
+        var durations: [String: TimeInterval] = [:]
+        for record in attendanceManager.records {
+             guard let task = record.taskDescription, !task.isEmpty, let endTime = record.endTime else {
+                 continue // Skip records without a task or end time
+             }
+             let duration = endTime.timeIntervalSince(record.startTime)
+             durations[task, default: 0] += duration
+         }
+         return durations
+    }
+
+    // Formatter for displaying time intervals nicely
+    private let durationFormatter: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated // e.g., "1h 15m"
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.zeroFormattingBehavior = .pad // Optional: show 0h 0m 5s
+        return formatter
+    }()
 
     // Determine the range of dates to display (e.g., last 365 days)
     // For simplicity now, we'll just use the days present in the records,
@@ -75,66 +116,108 @@ struct AttendanceRecordsView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView { // Use ScrollView for potentially large grids
-                LazyVGrid(columns: columns, spacing: 5) {
-                    ForEach(dateRange, id: \.self) { day in
-                        // Determine if the day cell should be 'active' (within the current month)
-                        let isDayInCurrentMonth = Calendar.current.isDate(day, equalTo: Date(), toGranularity: .month)
+            ScrollView { 
+                 // --- Calendar Grid Section ---
+                 Section(header: Text("Monthly Overview").font(.headline).padding([.horizontal, .top])) {
+                     LazyVGrid(columns: columns, spacing: 5) {
+                         ForEach(dateRange, id: \.self) { day in
+                             // Determine if the day cell should be 'active' (within the current month)
+                             let isDayInCurrentMonth = Calendar.current.isDate(day, equalTo: Date(), toGranularity: .month)
+     
+                             DayCell(day: day, hasRecord: recordsByDay[day] != nil)
+                                 .opacity(isDayInCurrentMonth ? 1.0 : 0.4) // Fade out days not in the current month
+                                 .onTapGesture {
+                                     // Toggle selection: Allow tapping only if it has a record AND is in the current month
+                                     if recordsByDay[day] != nil && isDayInCurrentMonth {
+                                         // If tapping the same date again, deselect it
+                                         if self.selectedDate == day {
+                                             self.selectedDate = nil
+                                         } else {
+                                             self.selectedDate = day
+                                         }
+                                     }
+                                 }
+                         }
+                     }
+                     .padding(.horizontal)
+                 }
 
-                        DayCell(day: day, hasRecord: recordsByDay[day] != nil)
-                            .opacity(isDayInCurrentMonth ? 1.0 : 0.4) // Fade out days not in the current month
-                            .onTapGesture {
-                                // Toggle selection: Allow tapping only if it has a record AND is in the current month
-                                if recordsByDay[day] != nil && isDayInCurrentMonth {
-                                    // If tapping the same date again, deselect it
-                                    if self.selectedDate == day {
-                                        self.selectedDate = nil
-                                    } else {
-                                        self.selectedDate = day
-                                    }
-                                }
-                            }
-                    }
-                }
-                .padding()
-
-                // --- Detail Section --- 
+                // --- Daily Detail Section --- 
                 if let date = selectedDate, let records = recordsByDay[date] {
-                    Section(header: Text("Details for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
-                        // Use a List for standard row appearance and potential separators
+                    Section(header: Text("Sessions for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
                         List {
                            ForEach(records) { record in
                                VStack(alignment: .leading) {
                                    Text("User: \(record.username)")
                                    Text("Class: \(record.className)")
-                                   Text("Time: \(record.date, formatter: DateFormatter.attendanceFormatter)")
-                                       .font(.caption)
-                                       .foregroundColor(.secondary)
+                                   Text("Task: \(record.taskDescription ?? "N/A")") // Display task
+                                   HStack {
+                                        Text("Start: \(record.startTime, formatter: DateFormatter.timeOnlyFormatter)") // Use new timeOnlyFormatter
+                                        if let endTime = record.endTime {
+                                            Text("End: \(endTime, formatter: DateFormatter.timeOnlyFormatter)")
+                                        } else {
+                                            Text("End: (In Progress)")
+                                                .foregroundColor(.secondary)
+                                        }
+                                   }
+                                   .font(.caption)
+                                   .foregroundColor(.secondary)
                                }
-                               .padding(.vertical, 2) // Add slight vertical padding within the row
+                               .padding(.vertical, 2)
                            }
                         }
-                         // Adjust frame height dynamically or set a fixed height
-                         // Be mindful of nested ScrollViews if List grows large
-                        .frame(height: CGFloat(records.count) * 80) // Set a fixed height for the details list
-                        .listStyle(.plain) // Use plain style to blend better
+                        .frame(height: CGFloat(records.count) * 85) // Adjust height slightly
+                        .listStyle(.plain)
                         .padding(.horizontal)
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top))) // Add a subtle transition
-                }
-                // --- End Detail Section ---
-            }
-            .navigationTitle("Tap Tracker")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Clear") {
-                        attendanceManager.records.removeAll()
-                        self.selectedDate = nil // Clear selection when records are cleared
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    
+                    // --- Daily Task Duration Section --- 
+                    let dailyTaskDurations = taskDurationsForSelectedDate
+                    if !dailyTaskDurations.isEmpty {
+                         Section(header: Text("Task Totals for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
+                              List {
+                                   ForEach(dailyTaskDurations.sorted(by: { $0.key < $1.key }), id: \.key) { task, totalDuration in
+                                        HStack {
+                                             Text(task)
+                                             Spacer()
+                                             Text(durationFormatter.string(from: totalDuration) ?? "--")
+                                        }
+                                   }
+                              }
+                              .frame(height: CGFloat(dailyTaskDurations.count) * 45) // Adjust height
+                              .listStyle(.plain)
+                              .padding(.horizontal)
+                         }
+                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
+                
+                // --- Overall Task Duration Section ---
+                let overallDurations = totalTaskDurations
+                if !overallDurations.isEmpty {
+                     Section(header: Text("Overall Task Totals").font(.headline).padding(.horizontal)) {
+                          List {
+                               ForEach(overallDurations.sorted(by: { $0.key < $1.key }), id: \.key) { task, totalDuration in
+                                    HStack {
+                                         Text(task)
+                                         Spacer()
+                                         Text(durationFormatter.string(from: totalDuration) ?? "--")
+                                    }
+                               }
+                          }
+                          // Make height dynamic based on content, up to a limit
+                          .frame(maxHeight: CGFloat(overallDurations.count) * 45) 
+                          .listStyle(.plain)
+                          .padding(.horizontal)
+                          .padding(.bottom) // Add padding at the bottom
+                     }
+                     .transition(.opacity) // Simple fade in
+                }
             }
+            .navigationTitle("Tap Tracker")
         }
-        .animation(.default, value: selectedDate) // Animate changes when selectedDate changes
+        .animation(.default, value: selectedDate)
     }
 }
 
@@ -160,6 +243,13 @@ extension DateFormatter {
         formatter.timeStyle = .short
         return formatter
     }
+    
+    static var timeOnlyFormatter: DateFormatter {
+         let formatter = DateFormatter()
+         formatter.dateStyle = .none
+         formatter.timeStyle = .short
+         return formatter
+     }
 
     // New formatter for displaying just the date
     static var dateOnlyFormatter: DateFormatter {
@@ -170,16 +260,15 @@ extension DateFormatter {
     }
 }
 
-// Add initializer to AttendanceRecord accepting a Date
-// This should ideally be in AttendanceManager.swift, but placed here for preview functionality
+// Updated initializer to reflect new AttendanceRecord structure
 extension AttendanceRecord {
      init(username: String, className: String, date: Date) {
-        self.id = UUID()
-        self.username = username
-        self.className = className
-        self.date = date // Use provided date
-    }
-}
+         // This initializer might be outdated or used only for previews?
+         // It doesn't align perfectly with the main init or the new fields.
+         // Consider removing or updating it based on usage.
+         self.init(username: username, className: className, startTime: date, endTime: nil, taskDescription: nil)
+     }
+ }
 
 // // Preview needs adjustment if you want to see the grid populated
 // struct AttendanceRecordsView_Previews: PreviewProvider {

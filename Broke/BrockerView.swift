@@ -26,6 +26,16 @@ struct BrokerView: View {
     @State private var attendanceMessage: String?
     @State private var showAttendanceRecords = false
 
+    // State for user app selection
+    @State private var showUserAppSelection = false
+    @State private var userActivitySelection = FamilyActivitySelection()
+
+    // State for task input SHEET
+    @State private var showTaskInputSheet = false // Replaces showTaskInputAlert
+    // @State private var currentTaskDescription: String = "" // Handled by sheet now
+    @State private var currentRecordId: UUID? = nil
+    @State private var profileToUseForBlocking: Profile? = nil // Still needed to pass to sheet
+
     private var isBlocking: Bool {
         appBlocker.isBlocking
     }
@@ -66,14 +76,75 @@ struct BrokerView: View {
                 }) {
                     Image(systemName: "person.3.fill")
                 },
-                trailing: loginManager.currentUserRole == .moderator ? createTagButton : nil
+                trailing: HStack { // Use HStack to group trailing items
+                    if loginManager.currentUserRole == .moderator {
+                        createTagButton
+                    }
+                    Button(action: { // Logout Button
+                        loginManager.logout()
+                    }) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                    }
+                }
             )
-            // ... existing alerts ...
+            .alert("Wrong Tag", isPresented: $showWrongTagAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("The scanned tag is not a valid Broker tag.")
+            }
+            .alert("Create Broker Tag?", isPresented: $showCreateTagAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Create") { createBrokerTag() }
+            } message: {
+                Text("Hold near an NFC tag to make it a Broker tag.")
+            }
+            .alert("NFC Error", isPresented: $nfcWriteSuccess) { // Assuming nfcWriteSuccess means failure
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Failed to write to NFC tag. Ensure it's close and writable.")
+            }
         }
         .animation(.spring(), value: isBlocking)
         .sheet(isPresented: $showAttendanceRecords) {
             AttendanceRecordsView()
                 .environmentObject(attendanceManager)
+        }
+        // Add sheet for user app selection
+        .sheet(isPresented: $showUserAppSelection) {
+            NavigationView {
+                FamilyActivityPicker(selection: $userActivitySelection)
+                    .navigationTitle("Select Apps to Block")
+                    .navigationBarItems(trailing: Button("Done") {
+                        handleUserAppSelectionDone()
+                    })
+            }
+        }
+        // Add sheet for task input
+        .sheet(isPresented: $showTaskInputSheet) {
+             // Ensure we have the necessary data before presenting
+             if let recordId = currentRecordId, let profile = profileToUseForBlocking {
+                 TaskInputSheet(
+                     isPresented: $showTaskInputSheet,
+                     recordIdToUpdate: recordId,
+                     profileToUse: profile,
+                     onComplete: { taskDescription in
+                         // This closure is called by the sheet when done
+                         appBlocker.toggleBlocking(for: profile) // Perform blocking
+                         showAttendance("Session started. Task: \(taskDescription ?? "None")")
+                         
+                         // Reset state after sheet dismissal
+                         currentRecordId = nil
+                         profileToUseForBlocking = nil
+                     }
+                 )
+                 .environmentObject(attendanceManager) // Pass needed environment objects
+                 .environmentObject(appBlocker)
+             } else {
+                  // Handle error case where sheet is triggered without necessary data
+                  // This shouldn't happen with the current logic, but good to have a fallback
+                  Text("Error presenting task input. Please try again.")
+                     .onAppear { showTaskInputSheet = false } // Dismiss immediately
+             }
         }
     }
     
@@ -81,22 +152,7 @@ struct BrokerView: View {
     private func scanTag() {
         nfcReader.scan { payload in
             if payload == tagPhrase {
-                let currentlyBlocking = appBlocker.isBlocking
-                appBlocker.toggleBlocking(for: profileManager.currentProfile)
-                
-                if currentlyBlocking == false {
-                    // When turning on blocking (class in session), log attendance with the current user.
-                    if let currentUser = loginManager.currentUser {
-                        attendanceManager.logAttendance(for: profileManager.currentProfile, user: currentUser)
-                    } else {
-                        // Fallback if user is somehow not set
-                        attendanceManager.logAttendance(for: profileManager.currentProfile, user: "Unknown")
-                    }
-                    showAttendance("Your attendance has been logged!")
-                } else {
-                    // When unblocking (class is over)
-                    showAttendance("Class is over")
-                }
+                handleValidScan()
             } else {
                 showWrongTagAlert = true
                 NSLog("Wrong Tag! Payload: \(payload)")
@@ -104,7 +160,79 @@ struct BrokerView: View {
         }
     }
 
-    
+    private func handleValidScan() {
+        let currentlyBlocking = appBlocker.isBlocking
+        let profile = profileManager.currentProfile
+
+        if currentlyBlocking == false { // STARTING session
+            if profile.userSelectsApps == true && loginManager.currentUserRole == .student {
+                // User needs to select apps first
+                userActivitySelection = FamilyActivitySelection()
+                userActivitySelection.applicationTokens = profile.appTokens
+                userActivitySelection.categoryTokens = profile.categoryTokens
+                showUserAppSelection = true // This will trigger handleUserAppSelectionDone
+            } else {
+                // No user app selection needed, proceed directly to task input/blocking
+                prepareAndStartBlocking(with: profile)
+            }
+        } else { // STOPPING session
+            // Just unblock. No user app selection or task input needed.
+            performToggleBlocking(with: profile)
+        }
+    }
+
+    // Called after user finishes selecting apps (if applicable)
+    private func handleUserAppSelectionDone() {
+        showUserAppSelection = false
+        let userSelectedProfile = Profile(
+            name: profileManager.currentProfile.name,
+            appTokens: userActivitySelection.applicationTokens,
+            categoryTokens: userActivitySelection.categoryTokens,
+            icon: profileManager.currentProfile.icon,
+            assignedUsernames: profileManager.currentProfile.assignedUsernames,
+            userSelectsApps: true
+        )
+        // Now proceed to task input/blocking with the user's selected profile
+        prepareAndStartBlocking(with: userSelectedProfile)
+    }
+
+    // New function to handle logic before showing task sheet
+    private func prepareAndStartBlocking(with profileToUse: Profile) {
+         if let currentUser = loginManager.currentUser {
+            currentRecordId = attendanceManager.logAttendanceStart(for: profileManager.currentProfile, user: currentUser)
+             if currentRecordId != nil {
+                 profileToUseForBlocking = profileToUse
+                 // Show task input SHEET
+                 showTaskInputSheet = true // Changed from showTaskInputAlert
+             } else {
+                 showAttendance("Failed to start session. Already active?")
+             }
+        } else {
+             showAttendance("Error: Could not identify user.")
+             // attendanceManager.logAttendanceStart(for: profileManager.currentProfile, user: "Unknown") 
+        }
+    }
+
+    // performToggleBlocking remains largely the same for STOPPING the session
+    private func performToggleBlocking(with profileToUse: Profile) {
+        let currentlyBlocking = appBlocker.isBlocking
+
+        if currentlyBlocking == false {
+            // STARTING Block: Logic moved to sheet's onComplete closure.
+             print("ERROR: performToggleBlocking called unexpectedly for STARTING block.")
+        } else {
+            // STOPPING Block:
+            if let currentUser = loginManager.currentUser {
+                attendanceManager.logAttendanceEnd(for: profileManager.currentProfile, user: currentUser)
+            } else {
+                 attendanceManager.logAttendanceEnd(for: profileManager.currentProfile, user: "Unknown") 
+                 print("Warning: Could not identify user when logging end time.")
+            }
+            appBlocker.toggleBlocking(for: profileToUse) 
+            showAttendance("Class is over")
+        }
+    }
+
     private func showAttendance(_ message: String) {
         withAnimation {
             attendanceMessage = message
@@ -113,6 +241,18 @@ struct BrokerView: View {
             withAnimation {
                 attendanceMessage = nil
             }
+        }
+    }
+    
+    // New async function to handle the button tap logic
+    private func handleButtonTap() async {
+        await appBlocker.requestAuthorization()
+        if appBlocker.isAuthorized {
+            scanTag()
+        } else {
+            // Handle authorization denial (e.g., show alert)
+            print("Authorization required to block apps.")
+            // You might want to show an alert here
         }
     }
     
@@ -125,9 +265,15 @@ struct BrokerView: View {
                 .transition(.scale)
             
             Button(action: {
-                withAnimation(.spring()) {
-                    scanTag()
+                // Move Task outside withAnimation
+                // The animations should still work due to state changes
+                Task {
+                    await handleButtonTap()
                 }
+                // Apply animation to any immediate synchronous UI changes if needed,
+                // but the Task itself runs separately.
+                // If no immediate changes, withAnimation might not be needed here.
+                // withAnimation(.spring()) {}
             }) {
                 Image(isBlocking ? "RedIcon" : "GreenIcon")
                     .resizable()

@@ -19,6 +19,7 @@ struct ProfileFormView: View {
     @State private var showAppSelection = false
     @State private var activitySelection: FamilyActivitySelection
     @State private var showDeleteConfirmation = false
+    @State private var userCanSelectApps: Bool
     let profile: Profile?
     let onDismiss: () -> Void
     
@@ -29,6 +30,7 @@ struct ProfileFormView: View {
         _profileName = State(initialValue: profile?.name ?? "")
         _profileIcon = State(initialValue: profile?.icon ?? "bell.slash")
         _assignedUsernamesString = State(initialValue: profile?.assignedUsernames?.joined(separator: ", ") ?? "")
+        _userCanSelectApps = State(initialValue: profile?.userSelectsApps ?? false)
         
         var selection = FamilyActivitySelection()
         selection.applicationTokens = profile?.appTokens ?? []
@@ -74,8 +76,11 @@ struct ProfileFormView: View {
                 }
                 
                 Section(header: Text("App Configuration")) {
+                    Toggle("Allow students to choose blocked apps", isOn: $userCanSelectApps)
+                        .padding(.vertical, 4)
+                    
                     Button(action: { showAppSelection = true }) {
-                        Text("Configure Blocked Apps")
+                        Text(userCanSelectApps ? "Configure Default Blocked Apps" : "Configure Blocked Apps")
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -153,7 +158,8 @@ struct ProfileFormView: View {
                 appTokens: activitySelection.applicationTokens,
                 categoryTokens: activitySelection.categoryTokens,
                 icon: profileIcon,
-                assignedUsernames: usernames
+                assignedUsernames: usernames,
+                userSelectsApps: userCanSelectApps
             )
         } else {
             let newProfile = Profile(
@@ -161,7 +167,8 @@ struct ProfileFormView: View {
                 appTokens: activitySelection.applicationTokens,
                 categoryTokens: activitySelection.categoryTokens,
                 icon: profileIcon,
-                assignedUsernames: usernames
+                assignedUsernames: usernames,
+                userSelectsApps: userCanSelectApps
             )
             profileManager.addProfile(newProfile: newProfile)
         }
