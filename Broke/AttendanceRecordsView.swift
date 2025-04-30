@@ -1,155 +1,158 @@
-
+//
+//  AttendanceRecordsView.swift
+//  Broke
+//
+//  Created by Theo Steiger on 2/13/25.
+//
 
 import SwiftUI
+import Foundation // Import Foundation for Calendar and Date manipulations
 
 struct AttendanceRecordsView: View {
     @EnvironmentObject var attendanceManager: AttendanceManager
-    @EnvironmentObject var loginManager: LoginManager
+    @State private var selectedDate: Date?
 
-    // Constants for the grid layout
-    private let daysInWeek = 7
-    private let squareSize: CGFloat = 15 // Adjust size if needed
-    private let spacing: CGFloat = 2      // Adjust spacing if needed
-    private let numberOfWeeks = 52 
-
-    // Calculate the date range and attendance data
-    private var contributionData: [Date: Int] {
-        calculateContributionData()
+    // Group records by day (start of day)
+    private var recordsByDay: [Date: [AttendanceRecord]] {
+        Dictionary(grouping: attendanceManager.records) { record in
+            Calendar.current.startOfDay(for: record.date)
+        }
     }
 
-    private var startDate: Date {
-        // Ensure start date is calculated correctly relative to today's start of day
-        Calendar.current.date(byAdding: .day, value: -(numberOfWeeks * daysInWeek) + 1, to: Calendar.current.startOfDay(for: Date()))!
+    // Determine the range of dates to display (e.g., last 365 days)
+    // For simplicity now, we'll just use the days present in the records,
+    // but a more robust implementation would define a fixed range.
+    private var dateRange: [Date] {
+        generateDatesForCurrentMonth()
     }
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: spacing), count: daysInWeek)
+    // Define grid columns (7 days a week)
+    private let columns: [GridItem] = Array(repeating: .init(.flexible()), count: 7)
+
+    // Function to generate dates for the current month, padded to full weeks
+    private func generateDatesForCurrentMonth() -> [Date] {
+        let calendar = Calendar.current
+        let today = Date()
+
+        // Get the interval for the current month
+        guard let monthInterval = calendar.dateInterval(of: .month, for: today) else {
+            return [] // Return empty if month interval can't be determined
+        }
+        let firstDayOfMonth = monthInterval.start
+        let lastDayOfMonth = monthInterval.end // Note: This is the start of the *next* day
+
+        // Get the interval for the week containing the first day of the month
+        guard let firstWeekInterval = calendar.dateInterval(of: .weekOfMonth, for: firstDayOfMonth) else {
+            return []
+        }
+        let firstDayToDisplay = firstWeekInterval.start
+
+        // Get the interval for the week containing the last *actual* day of the month
+        // We need to go back one second from monthInterval.end to get the *actual* last moment of the month
+        let actualLastMomentOfMonth = calendar.date(byAdding: .second, value: -1, to: lastDayOfMonth) ?? lastDayOfMonth
+        guard let lastWeekInterval = calendar.dateInterval(of: .weekOfMonth, for: actualLastMomentOfMonth) else {
+            return []
+        }
+        let lastDayToDisplay = lastWeekInterval.end // This is the start of the day *after* the last day shown
+
+        var dates: [Date] = []
+        calendar.enumerateDates(startingAfter: calendar.date(byAdding: .day, value: -1, to: firstDayToDisplay)!, // Start enumerating from the day *before* the first day
+                                matching: DateComponents(hour: 0, minute: 0, second: 0), // Match start of day
+                                matchingPolicy: .nextTime) { date, _, stop in
+            guard let currentDate = date else { return }
+            if currentDate >= lastDayToDisplay {
+                stop = true // Stop when we reach the day after the last day to display
+                return
+            }
+            // Only add dates that are within the first day to display or later
+            if currentDate >= firstDayToDisplay {
+                 dates.append(currentDate)
+            }
+        }
+
+        return dates
     }
 
     var body: some View {
-        // Removed NavigationView, assuming it's presented in a sheet from BrokerView
-        ScrollView {
-            VStack(alignment: .leading, spacing: 15) { // Increased spacing
-                Text("Attendance Activity (Last Year)")
-                    .font(.title2).bold()
-                    .foregroundColor(Color("PrimaryText")) // Use asset color
-                    .padding(.bottom, 5)
-                
-                contributionGraph
-                
-                legendView
-                    .padding(.top, 10)
+        NavigationView {
+            ScrollView { // Use ScrollView for potentially large grids
+                LazyVGrid(columns: columns, spacing: 5) {
+                    ForEach(dateRange, id: \.self) { day in
+                        // Determine if the day cell should be 'active' (within the current month)
+                        let isDayInCurrentMonth = Calendar.current.isDate(day, equalTo: Date(), toGranularity: .month)
 
-            }
-            .padding()
-        }
-        .background(Color("BackgroundColor").edgesIgnoringSafeArea(.all)) // Use asset color
-        .navigationTitle("Attendance Graph") // Keep title if presented in NavigationView elsewhere
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if loginManager.currentUserRole == .moderator {
-                    Button("Clear") {
-                        // Add confirmation alert?
-                        attendanceManager.clearRecords()
+                        DayCell(day: day, hasRecord: recordsByDay[day] != nil)
+                            .opacity(isDayInCurrentMonth ? 1.0 : 0.4) // Fade out days not in the current month
+                            .onTapGesture {
+                                // Toggle selection: Allow tapping only if it has a record AND is in the current month
+                                if recordsByDay[day] != nil && isDayInCurrentMonth {
+                                    // If tapping the same date again, deselect it
+                                    if self.selectedDate == day {
+                                        self.selectedDate = nil
+                                    } else {
+                                        self.selectedDate = day
+                                    }
+                                }
+                            }
                     }
-                    .tint(Color("DestructiveColor")) // Use red tint for clear
+                }
+                .padding()
+
+                // --- Detail Section --- 
+                if let date = selectedDate, let records = recordsByDay[date] {
+                    Section(header: Text("Details for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
+                        // Use a List for standard row appearance and potential separators
+                        List {
+                           ForEach(records) { record in
+                               VStack(alignment: .leading) {
+                                   Text("User: \(record.username)")
+                                   Text("Class: \(record.className)")
+                                   Text("Time: \(record.date, formatter: DateFormatter.attendanceFormatter)")
+                                       .font(.caption)
+                                       .foregroundColor(.secondary)
+                               }
+                               .padding(.vertical, 2) // Add slight vertical padding within the row
+                           }
+                        }
+                         // Adjust frame height dynamically or set a fixed height
+                         // Be mindful of nested ScrollViews if List grows large
+                        .frame(height: CGFloat(records.count) * 80) // Set a fixed height for the details list
+                        .listStyle(.plain) // Use plain style to blend better
+                        .padding(.horizontal)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top))) // Add a subtle transition
+                }
+                // --- End Detail Section ---
+            }
+            .navigationTitle("Tap Tracker")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Clear") {
+                        attendanceManager.records.removeAll()
+                        self.selectedDate = nil // Clear selection when records are cleared
+                    }
                 }
             }
         }
-    }
-    
-    // Extracted Graph View
-    private var contributionGraph: some View {
-         LazyVGrid(columns: columns, spacing: spacing) {
-            ForEach(0..<(numberOfWeeks * daysInWeek), id: \.self) { index in
-                let date = Calendar.current.date(byAdding: .day, value: index, to: firstDayOfGrid())!
-                let count = contributionData[startOfDay(for: date)] ?? 0
-                
-                // Only display squares for dates within the relevant range
-                if date >= startOfDay(for: startDate) && date <= Calendar.current.startOfDay(for: Date()) {
-                    Rectangle()
-                        .fill(colorForCount(count))
-                        .aspectRatio(1, contentMode: .fit) // Maintain square shape
-                        .cornerRadius(3)
-                        // Consider adding tooltip/popover on tap/hover
-                        // .onTapGesture { show details for 'date' }
-                } else {
-                    Rectangle() // Placeholder for future/past dates outside range
-                        .fill(Color.clear) // Make placeholders invisible
-                        .aspectRatio(1, contentMode: .fit)
-                }
-            }
-        }
-    }
-
-    // MARK: - Helper Functions
-
-    // Calculate the number of records per day for the current user
-    private func calculateContributionData() -> [Date: Int] {
-        guard let currentUser = loginManager.currentUser else { return [:] }
-        
-        var data = [Date: Int]()
-        // Filter records for the current user and within the date range for efficiency
-        let userRecords = attendanceManager.records.filter { 
-            $0.username == currentUser && 
-            $0.date >= startDate
-        }
-
-        for record in userRecords {
-            let day = startOfDay(for: record.date)
-            data[day, default: 0] += 1
-        }
-        return data
-    }
-
-    // Get the start of a given Date (midnight)
-    private func startOfDay(for date: Date) -> Date {
-        Calendar.current.startOfDay(for: date)
-    }
-    
-    // Calculate the first day to display in the grid (start of the week for the startDate)
-    private func firstDayOfGrid() -> Date {
-         let calendar = Calendar.current
-         // Calculate based on the start date for the data range
-         let firstDate = startOfDay(for: startDate)
-         let startWeekday = calendar.component(.weekday, from: firstDate)
-         let daysToSubtract = (startWeekday - calendar.firstWeekday + daysInWeek) % daysInWeek
-         return calendar.date(byAdding: .day, value: -daysToSubtract, to: firstDate)!
-    }
-
-    // Determine color based on attendance count
-    private func colorForCount(_ count: Int) -> Color {
-        switch count {
-        case 0:
-            return Color("SecondaryBackground") // Use light gray for empty days
-        case 1...2:
-            return Color("BrandBlue").opacity(0.4) // Light Blue
-        case 3...4:
-            return Color("BrandBlue").opacity(0.7) // Medium Blue
-        default: // 5+
-            return Color("BrandBlue") // Dark Blue
-        }
-    }
-    
-    // View for the color legend
-    private var legendView: some View {
-        HStack(spacing: 5) {
-            Text("Less")
-            ForEach([0, 1, 3, 5], id: \.self) { count in
-                 Rectangle()
-                    .fill(colorForCount(count))
-                    .frame(width: squareSize, height: squareSize)
-                    .cornerRadius(3)
-            }
-            Text("More")
-        }
-        .font(.caption)
-        .foregroundColor(Color("SecondaryText")) // Use asset color
+        .animation(.default, value: selectedDate) // Animate changes when selectedDate changes
     }
 }
 
-// Keep the DateFormatter extension if needed elsewhere, but it's not used in this view anymore
+// Simple view for each day cell
+struct DayCell: View {
+    let day: Date
+    let hasRecord: Bool
+
+    var body: some View {
+        Rectangle()
+            .fill(hasRecord ? Color.yellow : Color(UIColor.systemGray5)) // Use a system gray for better light/dark mode adaptivity
+            .frame(height: 30) // Adjust size as needed
+            .cornerRadius(3)
+            // Optional: Add day number or other indicators
+            // .overlay(Text("\(Calendar.current.component(.day, from: day))").font(.caption2))
+    }
+}
+
 extension DateFormatter {
     static var attendanceFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -157,39 +160,49 @@ extension DateFormatter {
         formatter.timeStyle = .short
         return formatter
     }
-}
 
-struct AttendanceRecordsView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Create mock data for preview
-        let attendanceManager = AttendanceManager()
-        let loginManager = LoginManager()
-        loginManager.currentUser = "user1"
-        loginManager.currentUserRole = .student
-        
-        // Add sample records
-        let calendar = Calendar.current
-        let today = Date()
-        for i in 0..<(52*7) { // Cover the year range
-             let date = calendar.date(byAdding: .day, value: -i, to: today)!
-             let randomScans = Int.random(in: 0...7) // Random attendance count
-             if randomScans > 0 {
-                 for _ in 0..<randomScans {
-                    // Ensure records are added with correct date for preview
-                    attendanceManager.records.append(AttendanceRecord(username: "user1", className: "Sample Class", date: date))
-                 }
-             }
-        }
-        // Important: Need to save the preview records if AttendanceManager loads on init
-        // attendanceManager.saveRecords() // Uncomment if needed, though preview usually uses fresh instance
-
-        // Embed in NavigationView for realistic preview presentation
-        NavigationView {
-             AttendanceRecordsView()
-                .environmentObject(attendanceManager)
-                .environmentObject(loginManager)
-                 // Add mock colors for preview if needed
-                 .environment(\.colorScheme, .light)
-        }
+    // New formatter for displaying just the date
+    static var dateOnlyFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
     }
 }
+
+// Add initializer to AttendanceRecord accepting a Date
+// This should ideally be in AttendanceManager.swift, but placed here for preview functionality
+extension AttendanceRecord {
+     init(username: String, className: String, date: Date) {
+        self.id = UUID()
+        self.username = username
+        self.className = className
+        self.date = date // Use provided date
+    }
+}
+
+// // Preview needs adjustment if you want to see the grid populated
+// struct AttendanceRecordsView_Previews: PreviewProvider {
+//     static var previews: some View {
+//         // Create a sample AttendanceManager with some data for the preview
+//         let manager = AttendanceManager()
+//         // Add some dummy records spanning a few days
+//         let calendar = Calendar.current
+//         let today = Date()
+//         manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: today))
+//         if let yesterday = calendar.date(byAdding: .day, value: -1, to: today) {
+//              manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: yesterday))
+//              manager.records.append(AttendanceRecord(username: "user1", className: "History", date: yesterday))
+//         }
+//         if let twoDaysAgo = calendar.date(byAdding: .day, value: -2, to: today) {
+//              manager.records.append(AttendanceRecord(username: "user2", className: "Science", date: twoDaysAgo))
+//         }
+//          if let tenDaysAgo = calendar.date(byAdding: .day, value: -10, to: today) {
+//              manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: tenDaysAgo))
+//         }
+
+
+//         AttendanceRecordsView()
+//             .environmentObject(manager)
+//     }
+// }
