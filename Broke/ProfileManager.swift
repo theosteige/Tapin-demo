@@ -172,17 +172,19 @@ struct Profile: Identifiable, Codable {
     var appTokens: Set<ApplicationToken>
     var categoryTokens: Set<ActivityCategoryToken>
     var icon: String // New property for icon
+    var assignedUsernames: [String]? // Added field for assigned usernames
 
     var isDefault: Bool {
         name == "Default"
     }
 
-    // New initializer to support default icon
-    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash") {
+    // New initializer to support default icon and assignedUsernames
+    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", assignedUsernames: [String]? = nil) { // Added assignedUsernames
         self.id = UUID()
         self.name = name
         self.appTokens = appTokens
         self.categoryTokens = categoryTokens
         self.icon = icon
+        self.assignedUsernames = assignedUsernames // Initialize assignedUsernames
     }
 }

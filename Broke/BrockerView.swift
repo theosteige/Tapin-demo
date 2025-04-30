@@ -44,6 +44,7 @@ struct BrokerView: View {
                             ClassesPicker(profileManager: profileManager)
                                 .frame(height: geometry.size.height / 2)
                                 .transition(.move(edge: .bottom))
+                                .environmentObject(loginManager)
                         }
                     }
                     .background(isBlocking ? Color("BlockingBackground") : Color("NonBlockingBackground"))
@@ -65,7 +66,7 @@ struct BrokerView: View {
                 }) {
                     Image(systemName: "person.3.fill")
                 },
-                trailing: createTagButton
+                trailing: loginManager.currentUserRole == .moderator ? createTagButton : nil
             )
             // ... existing alerts ...
         }
@@ -73,18 +74,6 @@ struct BrokerView: View {
         .sheet(isPresented: $showAttendanceRecords) {
             AttendanceRecordsView()
                 .environmentObject(attendanceManager)
-        }
-        .onAppear {
-            // If no classes are configured, seed some defaults based on the current user.
-            if profileManager.profiles.isEmpty, let user = loginManager.currentUser {
-                if user == "user1" {
-                    profileManager.addProfile(newProfile: Profile(name: "Math", appTokens: [], categoryTokens: [], icon: "book"))
-                    profileManager.addProfile(newProfile: Profile(name: "History", appTokens: [], categoryTokens: [], icon: "clock"))
-                } else if user == "user2" {
-                    profileManager.addProfile(newProfile: Profile(name: "Science", appTokens: [], categoryTokens: [], icon: "flask"))
-                    profileManager.addProfile(newProfile: Profile(name: "Art", appTokens: [], categoryTokens: [], icon: "paintbrush"))
-                }
-            }
         }
     }
     

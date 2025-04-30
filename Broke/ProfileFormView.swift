@@ -10,9 +10,11 @@ import SFSymbolsPicker
 import FamilyControls
 
 struct ProfileFormView: View {
+    @EnvironmentObject var loginManager: LoginManager
     @ObservedObject var profileManager: ProfileManager
     @State private var profileName: String
     @State private var profileIcon: String
+    @State private var assignedUsernamesString: String
     @State private var showSymbolsPicker = false
     @State private var showAppSelection = false
     @State private var activitySelection: FamilyActivitySelection
@@ -26,6 +28,7 @@ struct ProfileFormView: View {
         self.onDismiss = onDismiss
         _profileName = State(initialValue: profile?.name ?? "")
         _profileIcon = State(initialValue: profile?.icon ?? "bell.slash")
+        _assignedUsernamesString = State(initialValue: profile?.assignedUsernames?.joined(separator: ", ") ?? "")
         
         var selection = FamilyActivitySelection()
         selection.applicationTokens = profile?.appTokens ?? []
@@ -36,12 +39,12 @@ struct ProfileFormView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Profile Details")) {
+                Section(header: Text("Class Details")) {
                     VStack(alignment: .leading) {
-                        Text("Profile Name")
+                        Text("Class Name")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        TextField("Enter profile name", text: $profileName)
+                        TextField("Enter class name", text: $profileName)
                     }
                     
                     Button(action: { showSymbolsPicker = true }) {
@@ -54,6 +57,18 @@ struct ProfileFormView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                if loginManager.currentUserRole == .moderator {
+                    Section(header: Text("Assign Students")) {
+                        VStack(alignment: .leading) {
+                            Text("Assigned Usernames (comma-separated)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("user1, user2, ...", text: $assignedUsernamesString)
+                                .autocapitalization(.none)
                         }
                     }
                 }
@@ -85,13 +100,13 @@ struct ProfileFormView: View {
                 if profile != nil {
                     Section {
                         Button(action: { showDeleteConfirmation = true }) {
-                            Text("Delete Profile")
+                            Text("Delete Class")
                                 .foregroundColor(.red)
                         }
                     }
                 }
             }
-            .navigationTitle(profile == nil ? "Add Profile" : "Edit Profile")
+            .navigationTitle(profile == nil ? "Add Class" : "Edit Class")
             .navigationBarItems(
                 leading: Button("Cancel", action: onDismiss),
                 trailing: Button("Save", action: handleSave)
@@ -111,8 +126,8 @@ struct ProfileFormView: View {
             }
             .alert(isPresented: $showDeleteConfirmation) {
                 Alert(
-                    title: Text("Delete Profile"),
-                    message: Text("Are you sure you want to delete this profile?"),
+                    title: Text("Delete Class"),
+                    message: Text("Are you sure you want to delete this class?"),
                     primaryButton: .destructive(Text("Delete")) {
                         if let profile = profile {
                             profileManager.deleteProfile(withId: profile.id)
@@ -126,20 +141,27 @@ struct ProfileFormView: View {
     }
     
     private func handleSave() {
+        let usernames = assignedUsernamesString
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
         if let existingProfile = profile {
             profileManager.updateProfile(
                 id: existingProfile.id,
                 name: profileName,
                 appTokens: activitySelection.applicationTokens,
                 categoryTokens: activitySelection.categoryTokens,
-                icon: profileIcon
+                icon: profileIcon,
+                assignedUsernames: usernames
             )
         } else {
             let newProfile = Profile(
                 name: profileName,
                 appTokens: activitySelection.applicationTokens,
                 categoryTokens: activitySelection.categoryTokens,
-                icon: profileIcon
+                icon: profileIcon,
+                assignedUsernames: usernames
             )
             profileManager.addProfile(newProfile: newProfile)
         }
