@@ -125,7 +125,8 @@ class ProfileManager: ObservableObject {
         name: String? = nil,
         appTokens: Set<ApplicationToken>? = nil,
         categoryTokens: Set<ActivityCategoryToken>? = nil,
-        icon: String? = nil
+        icon: String? = nil,
+        assignedUsernames: [String]? = nil
     ) {
         if let index = profiles.firstIndex(where: { $0.id == id }) {
             if let name = name {
@@ -139,6 +140,9 @@ class ProfileManager: ObservableObject {
             }
             if let icon = icon {
                 profiles[index].icon = icon
+            }
+            if let assignedUsernames = assignedUsernames {
+                profiles[index].assignedUsernames = assignedUsernames
             }
             
             if currentProfileId == id {
