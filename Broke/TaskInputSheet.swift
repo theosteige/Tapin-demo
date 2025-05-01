@@ -1,3 +1,13 @@
+/**
+ * A SwiftUI view presented as a sheet for selecting a task category.
+ *
+ * This view allows the user to choose a `TaskCategory` for an existing,
+ * active attendance record. Upon selection and confirmation, it updates
+ * the record via the `AttendanceManager` and calls a completion handler.
+ * It requires bindings and environment objects to interact with the parent view
+ * and necessary managers (`AttendanceManager`, `AppBlocker`).
+ */
+
 import SwiftUI
 
 struct TaskInputSheet: View {

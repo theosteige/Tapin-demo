@@ -1,3 +1,20 @@
+/**
+ * Defines the data structure for a blocking profile (`Profile`)
+ * and manages the collection of profiles (`ProfileManager`).
+ *
+ * `Profile` struct:
+ *  - Represents a specific configuration for app blocking, including name, icon,
+ *    blocked application/category tokens, assigned usernames, and whether users
+ *    can select their own apps.
+ *
+ * `ProfileManager` class (ObservableObject):
+ *  - Manages the lifecycle of `Profile` objects.
+ *  - Loads profiles from and saves profiles to `UserDefaults`.
+ *  - Ensures a default profile exists.
+ *  - Tracks the currently selected profile (`currentProfileId`).
+ *  - Provides methods for adding, updating, deleting, and selecting profiles.
+ */
+
 //
 //  ProfileManager.swift
 //  Broke

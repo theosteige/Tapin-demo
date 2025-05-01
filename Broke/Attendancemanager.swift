@@ -1,3 +1,12 @@
+/**
+ * Defines data structures and manages logic for tracking attendance records.
+ *
+ * This file includes:
+ * - `TaskCategory`: An enumeration for classifying tasks associated with attendance sessions.
+ * - `AttendanceRecord`: A structure representing a single attendance session, including user, class, start/end times, and task category.
+ * - `AttendanceManager`: An observable object class responsible for creating, updating, and managing `AttendanceRecord` instances.
+ */
+
 //
 //  Attendancemanager.swift
 //  Broke

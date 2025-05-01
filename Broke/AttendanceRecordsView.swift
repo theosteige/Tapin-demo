@@ -1,3 +1,14 @@
+/**
+ * A SwiftUI view that displays attendance records.
+ *
+ * This view provides:
+ * - A monthly calendar grid highlighting days with attendance records.
+ * - A detail section showing individual attendance sessions for a selected date.
+ * - Aggregated time totals per task category for the selected date.
+ * - Aggregated time totals per task category across all recorded sessions.
+ * It interacts with the `AttendanceManager` environment object to access the data.
+ */
+
 //
 //  AttendanceRecordsView.swift
 //  Broke

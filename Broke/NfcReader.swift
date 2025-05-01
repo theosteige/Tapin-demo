@@ -1,3 +1,18 @@
+/**
+ * An observable object class responsible for handling Near Field Communication (NFC)
+ * interactions using CoreNFC.
+ *
+ * This class encapsulates the logic for:
+ * - Starting and managing NFC reader sessions for both reading and writing NDEF data.
+ * - Conforming to `NFCNDEFReaderSessionDelegate` to receive callbacks during the session.
+ * - Reading NDEF messages from compatible NFC tags, extracting text or URI payloads.
+ * - Writing NDEF text messages to writable NFC tags.
+ * - Providing completion handlers (`onScanComplete`, `onWriteComplete`) to return results
+ *   asynchronously.
+ * - Handling session errors and invalidation.
+ * - Includes basic simulator support for the `scan` function.
+ */
+
 //
 //  NfcReader.swift
 //  Broke

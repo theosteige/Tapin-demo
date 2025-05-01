@@ -1,3 +1,19 @@
+/**
+ * Defines user roles (`UserRole`) and manages user authentication state (`LoginManager`).
+ *
+ * `UserRole` enum:
+ *  - Defines distinct roles within the application (e.g., `moderator`, `student`).
+ *
+ * `LoginManager` class (ObservableObject):
+ *  - Manages the user's login session.
+ *  - Contains predefined credentials for different user roles (Note: Hardcoding credentials
+ *    is generally insecure for production applications).
+ *  - Publishes the login status (`isLoggedIn`), current user's username (`currentUser`), 
+ *    and the user's role (`currentUserRole`).
+ *  - Provides methods to `login` (validating credentials and updating state) and `logout`
+ *    (resetting session state).
+ */
+
 //
 //  LoginManager.swift
 //  Broke

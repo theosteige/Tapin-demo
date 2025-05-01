@@ -1,3 +1,12 @@
+/**
+ * A SwiftUI view responsible for handling user login.
+ *
+ * This view provides input fields for username and password.
+ * It interacts with the `LoginManager` environment object to authenticate the user.
+ * Upon successful login, the main application view (`BrokeApp`) transitions to the `BrockerView`.
+ * If authentication fails, an error message is displayed.
+ */
+
 //
 //  LoginView.swift
 //  Broke

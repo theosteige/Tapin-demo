@@ -1,3 +1,17 @@
+/**
+ * A SwiftUI view displaying a grid of available profiles (referred to as "Spaces" or "Classes").
+ *
+ * This view allows users to select the active profile for blocking sessions.
+ * Features include:
+ * - Filtering displayed profiles based on the logged-in user's role (`student` vs. `moderator`).
+ * - Tapping a profile cell sets it as the current profile in `ProfileManager`.
+ * - For moderators:
+ *   - Long-pressing a profile allows editing via `ProfileFormView`.
+ *   - A dedicated cell allows adding new profiles via `ProfileFormView`.
+ * It utilizes `ProfileCell` and `ProfileCellBase` for rendering individual profile representations.
+ * It requires access to `LoginManager` and `ProfileManager`.
+ */
+
 import SwiftUI
 import FamilyControls
 

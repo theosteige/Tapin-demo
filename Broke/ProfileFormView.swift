@@ -1,3 +1,18 @@
+/**
+ * A SwiftUI view presented as a sheet for creating or editing profiles (Classes/Spaces).
+ *
+ * This view provides a form to configure various aspects of a profile:
+ * - Profile name.
+ * - Profile icon selection using `SFSymbolsPicker`.
+ * - Assignment of student usernames (for moderators).
+ * - Configuration of blocked apps and categories using `FamilyActivityPicker`.
+ * - A toggle to determine if students can select their own apps for this profile.
+ * - Deletion functionality for existing profiles (with confirmation).
+ *
+ * It interacts with `ProfileManager` to save or update profile data and calls an `onDismiss`
+ * closure upon completion or cancellation.
+ */
+
 //
 //  EditProfileView.swift
 //  Broke

@@ -1,3 +1,19 @@
+/**
+ * An observable object class responsible for managing app blocking using the
+ * FamilyControls and ManagedSettings frameworks.
+ *
+ * Key functions include:
+ * - Utilizing `ManagedSettingsStore` to apply blocking rules.
+ * - Tracking and publishing the current blocking status (`isBlocking`) and authorization
+ *   status (`isAuthorized`).
+ * - Requesting FamilyControls authorization (`requestAuthorization`).
+ * - Toggling the blocking state (`toggleBlocking`), saving the state to `UserDefaults`,
+ *   and applying the appropriate settings based on a given `Profile`.
+ * - Applying or removing app/category restrictions (`applyBlockingSettings`) via the
+ *   `ManagedSettingsStore`.
+ * - Loading the initial blocking state from `UserDefaults`.
+ */
+
 //
 //  AppBlocker.swift
 //  Broke

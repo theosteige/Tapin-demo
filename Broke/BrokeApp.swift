@@ -1,4 +1,15 @@
-
+/**
+ * The main entry point for the Broke SwiftUI application.
+ *
+ * This structure defines the application's lifecycle and root view hierarchy.
+ * Key responsibilities include:
+ * - Initializing and managing the application's core state objects/managers
+ *   (`AppBlocker`, `ProfileManager`, `AttendanceManager`, `LoginManager`) using `@StateObject`.
+ * - Conditionally presenting either the `LoginView` or the main `BrockerView` based on the
+ *   user's login status (`loginManager.isLoggedIn`).
+ * - Injecting the core manager objects into the SwiftUI environment using `.environmentObject`,
+ *   making them accessible to descendant views.
+ */
 
 import SwiftUI
 

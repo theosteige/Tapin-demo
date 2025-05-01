@@ -1,3 +1,20 @@
+/**
+ * The main view displayed after successful login.
+ *
+ * This view serves as the central hub for the application's core functionality:
+ * - Toggling the app blocking state via an interactive button and NFC tag scanning.
+ * - Managing the workflow for starting a blocking session, which includes:
+ *   - Optional user selection of specific apps/categories to block (`FamilyActivityPicker`).
+ *   - Mandatory selection of a task category (`TaskInputSheet`).
+ *   - Logging attendance start/end times (`AttendanceManager`).
+ * - Displaying the profile/class selection view (`ClassesPicker`) when not blocking.
+ * - Providing access to view past attendance records (`AttendanceRecordsView`).
+ * - Allowing moderators to create new NFC tags.
+ * - Handling user logout.
+ * It coordinates interactions between `AppBlocker`, `ProfileManager`, `AttendanceManager`,
+ * `LoginManager`, and `NFCReader`.
+ */
+
 //
 //  BrockerView.swift
 //  Broke
