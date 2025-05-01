@@ -77,18 +77,3 @@ struct TaskInputSheet: View {
         isPresented = false
     }
 }
-
-// Preview might need adjustment depending on how you handle environment objects
-// struct TaskInputSheet_Previews: PreviewProvider {
-//     static var previews: some View {
-//         // Need to provide dummy data and bindings for preview
-//         TaskInputSheet(
-//             isPresented: .constant(true), 
-//             recordIdToUpdate: UUID(), 
-//             profileToUse: Profile(name: "Preview Profile", appTokens: [], categoryTokens: []),
-//             onComplete: { _ in }
-//         )
-//         .environmentObject(AttendanceManager()) // Provide dummy manager
-//         .environmentObject(AppBlocker()) // Provide dummy blocker
-//     }
-// } 
