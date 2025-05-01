@@ -9,69 +9,50 @@ struct TaskInputSheet: View {
     @Binding var isPresented: Bool
     let recordIdToUpdate: UUID
     let profileToUse: Profile
-    let onComplete: (String?) -> Void // Closure to call when done (passes task description)
+    let onComplete: (String?) -> Void // Closure to call when done (passes task description string)
 
     // Internal state for the sheet
-    @State private var selectedTaskOption: String = "-- Select Task --"
-    @State private var newTaskDescription: String = ""
-    
-    private let newTaskOptionString = "-- New Task --"
-    private let selectTaskOptionString = "-- Select Task --"
-    
-    private var taskOptions: [String] {
-        // Combine placeholder, existing tasks, and the new task option
-        [selectTaskOptionString] + attendanceManager.uniqueTaskDescriptions + [newTaskOptionString]
-    }
-    
-    private var isNewTaskSelected: Bool {
-        selectedTaskOption == newTaskOptionString
-    }
+    @State private var selectedTaskCategory: TaskCategory? = nil // Changed type, default nil
 
     var body: some View {
         NavigationView {
             Form {
-                Picker("Select Task", selection: $selectedTaskOption) {
-                    ForEach(taskOptions, id: \.self) { task in
-                        Text(task)
+                // Picker using TaskCategory
+                Picker("Select Task", selection: $selectedTaskCategory) {
+                    Text("-- Select Task --").tag(nil as TaskCategory?) // Add a nil option
+                    ForEach(TaskCategory.allCases) { category in
+                        Text(category.rawValue).tag(category as TaskCategory?)
                     }
-                }
-                
-                if isNewTaskSelected {
-                    TextField("Enter new task description", text: $newTaskDescription)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 
                 Button("Start Session") {
                     startSession()
                 }
-                .disabled(selectedTaskOption == selectTaskOptionString && !isNewTaskSelected) // Disable if no task selected/entered
+                .disabled(selectedTaskCategory == nil) // Disable if no category selected
             }
             .navigationTitle("Select Task")
             .navigationBarItems(leading: Button("Cancel") {
                  isPresented = false // Just dismiss
             })
-            .animation(.default, value: selectedTaskOption) // Animate text field appearance
         }
     }
     
     private func startSession() {
-        var finalTaskDescription: String?
+         // Check if a category was selected
+         guard let category = selectedTaskCategory else {
+             print("No task category selected.") 
+             // If no category is selected, maybe treat as "Other" or just proceed without task?
+             // Let's call onComplete with nil for now, indicating no specific task chosen.
+             onComplete(nil) 
+             isPresented = false
+             return
+         }
         
-        if isNewTaskSelected {
-            if !newTaskDescription.isEmpty {
-                finalTaskDescription = newTaskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        } else if selectedTaskOption != selectTaskOptionString {
-            finalTaskDescription = selectedTaskOption
-        }
+        // Update the task category in AttendanceManager
+        attendanceManager.updateTaskCategory(for: recordIdToUpdate, category: category)
         
-        // Update the task in AttendanceManager
-        if let task = finalTaskDescription {
-             attendanceManager.updateTask(for: recordIdToUpdate, task: task)
-        }
-        
-        // Call the completion handler (which will trigger blocking)
-        onComplete(finalTaskDescription)
+        // Call the completion handler (passing the selected category's rawValue for the message)
+        onComplete(category.rawValue)
         
         // Dismiss the sheet
         isPresented = false

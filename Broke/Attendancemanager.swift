@@ -7,6 +7,15 @@
 
 import SwiftUI
 
+// Define predefined task categories
+enum TaskCategory: String, CaseIterable, Identifiable, Codable {
+    case schoolwork = "Schoolwork"
+    case personalWork = "Personal Work"
+    case other = "Other"
+    
+    var id: String { self.rawValue } // Conform to Identifiable
+}
+
 // Updated model to include task tracking
 struct AttendanceRecord: Identifiable, Codable {
     let id: UUID
@@ -14,7 +23,7 @@ struct AttendanceRecord: Identifiable, Codable {
     let className: String
     let startTime: Date // Renamed from date
     var endTime: Date?   // Optional: Set when user taps out
-    var taskDescription: String? // Optional: User-provided task
+    var taskCategory: TaskCategory? // Changed from taskDescription: String?
 
     // Initializer for starting a session (no task description initially)
     init(username: String, className: String) {
@@ -23,17 +32,17 @@ struct AttendanceRecord: Identifiable, Codable {
         self.className = className
         self.startTime = Date() // Set current time as start time
         self.endTime = nil
-        self.taskDescription = nil
+        self.taskCategory = nil // Initialize as nil
     }
     
     // Add a convenience initializer if needed for previews or testing
-     init(id: UUID = UUID(), username: String, className: String, startTime: Date, endTime: Date? = nil, taskDescription: String? = nil) {
+     init(id: UUID = UUID(), username: String, className: String, startTime: Date, endTime: Date? = nil, taskCategory: TaskCategory? = nil) { // Changed parameter
         self.id = id
         self.username = username
         self.className = className
         self.startTime = startTime
         self.endTime = endTime
-        self.taskDescription = taskDescription
+        self.taskCategory = taskCategory // Assign taskCategory
     }
 }
 
@@ -55,11 +64,11 @@ class AttendanceManager: ObservableObject {
         return newRecord.id // Return ID to potentially update task later
     }
     
-    // Function to update task description for a specific record
-    func updateTask(for recordId: UUID, task: String) {
+    // Renamed and modified function to update task category
+    func updateTaskCategory(for recordId: UUID, category: TaskCategory) { // Changed parameter type
         if let index = records.firstIndex(where: { $0.id == recordId }) {
-            records[index].taskDescription = task
-            print("Updated task for record \(recordId) to: \(task)")
+            records[index].taskCategory = category // Update taskCategory
+            print("Updated task category for record \(recordId) to: \(category.rawValue)")
         }
     }
 
@@ -78,12 +87,5 @@ class AttendanceManager: ObservableObject {
     func records(for date: Date) -> [AttendanceRecord] {
         let calendar = Calendar.current
         return records.filter { calendar.isDate($0.startTime, inSameDayAs: date) }
-    }
-    
-    // Computed property to get unique, sorted task descriptions
-    var uniqueTaskDescriptions: [String] {
-        let allTasks = records.compactMap { $0.taskDescription }.filter { !$0.isEmpty }
-        let uniqueTasks = Set(allTasks)
-        return Array(uniqueTasks).sorted()
     }
 }

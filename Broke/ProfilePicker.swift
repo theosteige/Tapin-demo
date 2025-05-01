@@ -25,7 +25,7 @@ struct ClassesPicker: View {
 
     var body: some View {
         VStack {
-            Text("Classes")
+            Text("My Spaces")
                 .font(.headline)
                 .padding(.horizontal)
                 .padding(.top)
@@ -45,7 +45,7 @@ struct ClassesPicker: View {
                     }
                     
                     if loginManager.currentUserRole == .moderator {
-                        ProfileCellBase(name: "New Class", icon: "plus", appsBlocked: nil, categoriesBlocked: nil, isSelected: false, isDashed: true, hasDivider: false)
+                        ProfileCellBase(name: "New Space", icon: "plus", appsBlocked: nil, categoriesBlocked: nil, isSelected: false, isDashed: true, hasDivider: false)
                             .onTapGesture {
                                 showAddProfileView = true
                             }

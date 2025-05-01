@@ -74,7 +74,10 @@ struct BrokerView: View {
                 leading: Button(action: {
                     showAttendanceRecords = true
                 }) {
-                    Image(systemName: "person.3.fill")
+                    HStack {
+                        Image(systemName: "calendar")
+                        Text("Tap Tracker")
+                    }
                 },
                 trailing: HStack { // Use HStack to group trailing items
                     if loginManager.currentUserRole == .moderator {
@@ -131,7 +134,6 @@ struct BrokerView: View {
                          // This closure is called by the sheet when done
                          appBlocker.toggleBlocking(for: profile) // Perform blocking
                          showAttendance("Session started. Task: \(taskDescription ?? "None")")
-                         
                          // Reset state after sheet dismissal
                          currentRecordId = nil
                          profileToUseForBlocking = nil
@@ -229,7 +231,7 @@ struct BrokerView: View {
                  print("Warning: Could not identify user when logging end time.")
             }
             appBlocker.toggleBlocking(for: profileToUse) 
-            showAttendance("Class is over")
+            showAttendance("See you later")
         }
     }
 

@@ -20,33 +20,32 @@ struct AttendanceRecordsView: View {
     }
 
     // Calculate aggregated task durations for the selected date
-    private var taskDurationsForSelectedDate: [String: TimeInterval] {
+    private var taskDurationsForSelectedDate: [TaskCategory: TimeInterval] {
         guard let date = selectedDate, let recordsForDay = recordsByDay[date] else {
             return [:]
         }
-        
-        var durations: [String: TimeInterval] = [:]
-        
+        var durations: [TaskCategory: TimeInterval] = [:]
         for record in recordsForDay {
-            guard let task = record.taskDescription, !task.isEmpty, let endTime = record.endTime else {
-                continue // Skip records without a task or end time
+            // Use taskCategory, check it's not nil
+            guard let category = record.taskCategory, let endTime = record.endTime else {
+                continue // Skip records without a category or end time
             }
             let duration = endTime.timeIntervalSince(record.startTime)
-            durations[task, default: 0] += duration
+            durations[category, default: 0] += duration
         }
-        
         return durations
     }
     
     // Calculate aggregated task durations across ALL records
-    private var totalTaskDurations: [String: TimeInterval] {
-        var durations: [String: TimeInterval] = [:]
+    private var totalTaskDurations: [TaskCategory: TimeInterval] {
+        var durations: [TaskCategory: TimeInterval] = [:]
         for record in attendanceManager.records {
-             guard let task = record.taskDescription, !task.isEmpty, let endTime = record.endTime else {
-                 continue // Skip records without a task or end time
+             // Use taskCategory, check it's not nil
+             guard let category = record.taskCategory, let endTime = record.endTime else {
+                 continue // Skip records without a category or end time
              }
              let duration = endTime.timeIntervalSince(record.startTime)
-             durations[task, default: 0] += duration
+             durations[category, default: 0] += duration
          }
          return durations
     }
@@ -150,18 +149,17 @@ struct AttendanceRecordsView: View {
                                VStack(alignment: .leading) {
                                    Text("User: \(record.username)")
                                    Text("Class: \(record.className)")
-                                   Text("Task: \(record.taskDescription ?? "N/A")") // Display task
+                                   // Display category rawValue
+                                   Text("Task: \(record.taskCategory?.rawValue ?? "N/A")") 
                                    HStack {
-                                        Text("Start: \(record.startTime, formatter: DateFormatter.timeOnlyFormatter)") // Use new timeOnlyFormatter
+                                        Text("Start: \(record.startTime, formatter: DateFormatter.timeOnlyFormatter)")
                                         if let endTime = record.endTime {
                                             Text("End: \(endTime, formatter: DateFormatter.timeOnlyFormatter)")
                                         } else {
-                                            Text("End: (In Progress)")
-                                                .foregroundColor(.secondary)
+                                            Text("End: (In Progress)").foregroundColor(.secondary)
                                         }
                                    }
-                                   .font(.caption)
-                                   .foregroundColor(.secondary)
+                                   .font(.caption).foregroundColor(.secondary)
                                }
                                .padding(.vertical, 2)
                            }
@@ -177,9 +175,11 @@ struct AttendanceRecordsView: View {
                     if !dailyTaskDurations.isEmpty {
                          Section(header: Text("Task Totals for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
                               List {
-                                   ForEach(dailyTaskDurations.sorted(by: { $0.key < $1.key }), id: \.key) { task, totalDuration in
+                                   // Sort by category rawValue for consistent order
+                                   ForEach(dailyTaskDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
                                         HStack {
-                                             Text(task)
+                                             // Display category rawValue
+                                             Text(category.rawValue)
                                              Spacer()
                                              Text(durationFormatter.string(from: totalDuration) ?? "--")
                                         }
@@ -198,9 +198,11 @@ struct AttendanceRecordsView: View {
                 if !overallDurations.isEmpty {
                      Section(header: Text("Overall Task Totals").font(.headline).padding(.horizontal)) {
                           List {
-                               ForEach(overallDurations.sorted(by: { $0.key < $1.key }), id: \.key) { task, totalDuration in
+                               // Sort by category rawValue
+                               ForEach(overallDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
                                     HStack {
-                                         Text(task)
+                                         // Display category rawValue
+                                         Text(category.rawValue)
                                          Spacer()
                                          Text(durationFormatter.string(from: totalDuration) ?? "--")
                                     }
@@ -228,7 +230,7 @@ struct DayCell: View {
 
     var body: some View {
         Rectangle()
-            .fill(hasRecord ? Color.yellow : Color(UIColor.systemGray5)) // Use a system gray for better light/dark mode adaptivity
+            .fill(hasRecord ? Color(.systemMint) : Color(UIColor.systemGray5)) // Use a system gray for better light/dark mode adaptivity
             .frame(height: 30) // Adjust size as needed
             .cornerRadius(3)
             // Optional: Add day number or other indicators
@@ -266,32 +268,7 @@ extension AttendanceRecord {
          // This initializer might be outdated or used only for previews?
          // It doesn't align perfectly with the main init or the new fields.
          // Consider removing or updating it based on usage.
-         self.init(username: username, className: className, startTime: date, endTime: nil, taskDescription: nil)
+         self.init(username: username, className: className, startTime: date, endTime: nil, taskCategory: nil)
      }
  }
 
-// // Preview needs adjustment if you want to see the grid populated
-// struct AttendanceRecordsView_Previews: PreviewProvider {
-//     static var previews: some View {
-//         // Create a sample AttendanceManager with some data for the preview
-//         let manager = AttendanceManager()
-//         // Add some dummy records spanning a few days
-//         let calendar = Calendar.current
-//         let today = Date()
-//         manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: today))
-//         if let yesterday = calendar.date(byAdding: .day, value: -1, to: today) {
-//              manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: yesterday))
-//              manager.records.append(AttendanceRecord(username: "user1", className: "History", date: yesterday))
-//         }
-//         if let twoDaysAgo = calendar.date(byAdding: .day, value: -2, to: today) {
-//              manager.records.append(AttendanceRecord(username: "user2", className: "Science", date: twoDaysAgo))
-//         }
-//          if let tenDaysAgo = calendar.date(byAdding: .day, value: -10, to: today) {
-//              manager.records.append(AttendanceRecord(username: "user1", className: "Math", date: tenDaysAgo))
-//         }
-
-
-//         AttendanceRecordsView()
-//             .environmentObject(manager)
-//     }
-// }
