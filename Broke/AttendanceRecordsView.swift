@@ -18,10 +18,24 @@
 
 import SwiftUI
 import Foundation // Import Foundation for Calendar and Date manipulations
+import Charts // Import SwiftUI Charts
+
+// Define a structure for chart data points
+struct TaskDurationChartData: Identifiable {
+    // Use category rawValue as stable ID
+    var id: String { category.rawValue }
+    let category: TaskCategory
+    let duration: TimeInterval // Duration in seconds
+}
 
 struct AttendanceRecordsView: View {
     @EnvironmentObject var attendanceManager: AttendanceManager
     @State private var selectedDate: Date?
+    // Add state variables to control expansion if needed, or rely on default DisclosureGroup state
+    // @State private var isMonthlyOverviewExpanded: Bool = true
+    // @State private var isDailyDetailExpanded: Bool = true
+    // @State private var isDailyTotalsExpanded: Bool = true
+    // @State private var isOverallTotalsExpanded: Bool = true
 
     // Group records by day (start of day)
     private var recordsByDay: [Date: [AttendanceRecord]] {
@@ -47,18 +61,31 @@ struct AttendanceRecordsView: View {
         return durations
     }
     
-    // Calculate aggregated task durations across ALL records
+    // Calculate aggregated task durations across ALL records, including tasks with 0 time
     private var totalTaskDurations: [TaskCategory: TimeInterval] {
-        var durations: [TaskCategory: TimeInterval] = [:]
+        // Initialize durations dictionary with all possible task categories set to 0
+        var durations = Dictionary(uniqueKeysWithValues: TaskCategory.allCases.map { ($0, 0.0) })
+        
         for record in attendanceManager.records {
              // Use taskCategory, check it's not nil
              guard let category = record.taskCategory, let endTime = record.endTime else {
                  continue // Skip records without a category or end time
              }
-             let duration = endTime.timeIntervalSince(record.startTime)
-             durations[category, default: 0] += duration
+             // Only add duration if the category exists in our predefined list (safety check)
+             if durations.keys.contains(category) {
+                 let duration = endTime.timeIntervalSince(record.startTime)
+                 durations[category, default: 0] += duration
+             }
          }
          return durations
+    }
+
+    // Prepare data for the chart, filtering out zero-duration tasks for visual clarity
+    private var chartData: [TaskDurationChartData] {
+        totalTaskDurations
+            .filter { $0.value > 0 } // Only include tasks with recorded time in the chart
+            .map { TaskDurationChartData(category: $0.key, duration: $0.value) }
+            .sorted { $0.category.rawValue < $1.category.rawValue } // Consistent order
     }
 
     // Formatter for displaying time intervals nicely
@@ -127,8 +154,9 @@ struct AttendanceRecordsView: View {
     var body: some View {
         NavigationView {
             ScrollView { 
-                 // --- Calendar Grid Section ---
-                 Section(header: Text("Monthly Overview").font(.headline).padding([.horizontal, .top])) {
+                 // --- Collapsible Calendar Grid Section ---
+                 // Section header becomes the DisclosureGroup label
+                 DisclosureGroup("Monthly Overview") { // Wrap content in DisclosureGroup
                      LazyVGrid(columns: columns, spacing: 5) {
                          ForEach(dateRange, id: \.self) { day in
                              // Determine if the day cell should be 'active' (within the current month)
@@ -151,10 +179,11 @@ struct AttendanceRecordsView: View {
                      }
                      .padding(.horizontal)
                  }
+                 .padding([.horizontal, .top]) // Apply padding to the DisclosureGroup
 
-                // --- Daily Detail Section --- 
+                // --- Collapsible Daily Detail Section --- 
                 if let date = selectedDate, let records = recordsByDay[date] {
-                    Section(header: Text("Sessions for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
+                    DisclosureGroup("Sessions for \(date, formatter: DateFormatter.dateOnlyFormatter)") { // Wrap content in DisclosureGroup
                         List {
                            ForEach(records) { record in
                                VStack(alignment: .leading) {
@@ -179,12 +208,13 @@ struct AttendanceRecordsView: View {
                         .listStyle(.plain)
                         .padding(.horizontal)
                     }
+                    .padding(.horizontal) // Apply padding to the DisclosureGroup
                     .transition(.opacity.combined(with: .move(edge: .top)))
                     
-                    // --- Daily Task Duration Section --- 
+                    // --- Collapsible Daily Task Duration Section --- 
                     let dailyTaskDurations = taskDurationsForSelectedDate
                     if !dailyTaskDurations.isEmpty {
-                         Section(header: Text("Task Totals for \(date, formatter: DateFormatter.dateOnlyFormatter)").font(.headline).padding(.horizontal)) {
+                         DisclosureGroup("Task Totals for \(date, formatter: DateFormatter.dateOnlyFormatter)") { // Wrap content in DisclosureGroup
                               List {
                                    // Sort by category rawValue for consistent order
                                    ForEach(dailyTaskDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
@@ -200,33 +230,79 @@ struct AttendanceRecordsView: View {
                               .listStyle(.plain)
                               .padding(.horizontal)
                          }
+                         .padding(.horizontal) // Apply padding to the DisclosureGroup
                          .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 
-                // --- Overall Task Duration Section ---
-                let overallDurations = totalTaskDurations
-                if !overallDurations.isEmpty {
-                     Section(header: Text("Overall Task Totals").font(.headline).padding(.horizontal)) {
-                          List {
-                               // Sort by category rawValue
-                               ForEach(overallDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
-                                    HStack {
-                                         // Display category rawValue
-                                         Text(category.rawValue)
-                                         Spacer()
-                                         Text(durationFormatter.string(from: totalDuration) ?? "--")
-                                    }
-                               }
-                          }
-                          // Make height dynamic based on content, up to a limit
-                          .frame(maxHeight: CGFloat(overallDurations.count) * 45) 
-                          .listStyle(.plain)
-                          .padding(.horizontal)
-                          .padding(.bottom) // Add padding at the bottom
+                // --- Collapsible Overall Task Duration Section ---
+                 DisclosureGroup("Overall Task Totals") { // Wrap content in DisclosureGroup
+                     HStack(alignment: .top) { // Use HStack for side-by-side layout
+                         // Chart View (Requires iOS 16+)
+                         VStack {
+                             Text("Total Time Distribution").font(.caption).foregroundColor(.secondary)
+                             if #available(iOS 16.0, *) {
+                                 if chartData.isEmpty {
+                                     Text("No time recorded yet.")
+                                         .foregroundColor(.secondary)
+                                         .frame(minWidth: 150, minHeight: 150)
+                                         .background(Color(UIColor.systemGray5))
+                                         .cornerRadius(8)
+                                 } else {
+                                     Chart(chartData) { dataPoint in
+                                         // Bar chart: Task Category on Y-axis, Duration on X-axis
+                                         BarMark(
+                                             x: .value("Duration (s)", dataPoint.duration),
+                                             y: .value("Task", dataPoint.category.rawValue)
+                                         )
+                                         // Use foregroundStyle(by:) for automatic coloring per category
+                                         .foregroundStyle(by: .value("Task", dataPoint.category.rawValue))
+                                     }
+                                     // Add horizontal axis label
+                                     .chartXAxisLabel("Total Time (seconds)", alignment: .center)
+                                     // Optional: Customize X-axis formatting if needed
+                                     // .chartXAxis {
+                                     //     AxisMarks(format: /* Custom Formatter */)
+                                     // }
+                                     // Optional: Hide Y-axis labels if category names are clear from legend/bars
+                                     // .chartYAxis(.hidden)
+                                     .frame(minHeight: 150) // Ensure chart has a minimum height
+                                 }
+                             } else {
+                                 // Fallback on earlier versions
+                                 Text("Charts require iOS 16+")
+                                     .foregroundColor(.secondary)
+                                     .frame(minWidth: 150, minHeight: 150)
+                             }
+                         }
+                         .frame(minWidth: 150) // Give the chart container a minimum width
+                         .padding(.trailing) // Add some spacing between graph and list
+ 
+                         // Existing List View for totals
+                         VStack(alignment: .leading) { // Wrap List in VStack if needed for alignment/sizing
+                              let overallDurations = totalTaskDurations
+                              Text("Total Time per Task:").font(.subheadline) // Add a label for the list
+                              List {
+                                   // Sort by category rawValue
+                                   ForEach(overallDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
+                                        HStack {
+                                             // Display category rawValue
+                                             Text(category.rawValue)
+                                             Spacer()
+                                             Text(durationFormatter.string(from: totalDuration) ?? "0s") // Show "0s" if duration is zero or formatting fails
+                                        }
+                                   }
+                              }
+                              // Make height dynamic based on content, up to a limit
+                              .frame(maxHeight: CGFloat(max(overallDurations.count, 1)) * 45)
+                              .listStyle(.plain)
+                         }
                      }
-                     .transition(.opacity) // Simple fade in
-                }
+                     .padding(.horizontal)
+                     .padding(.bottom) // Add padding at the bottom
+                 }
+                 .padding([.horizontal, .bottom]) // Apply padding to the DisclosureGroup
+                 .transition(.opacity) // Simple fade in
             }
             .navigationTitle("Tap Tracker")
         }
