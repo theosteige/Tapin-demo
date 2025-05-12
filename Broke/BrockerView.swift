@@ -27,6 +27,16 @@ import SFSymbolsPicker
 import FamilyControls
 import ManagedSettings
 
+// Assuming TaskCategory is defined elsewhere (e.g., in AttendanceManager.swift or a Models file)
+// and conforms to: Identifiable, CaseIterable, Hashable
+// For example:
+// enum TaskCategory: String, CaseIterable, Identifiable {
+//     case work = "Work"
+//     case study = "Study"
+//     case focus = "Focus"
+//     var id: String { self.rawValue }
+// }
+
 struct BrokerView: View {
     @EnvironmentObject private var appBlocker: AppBlocker
     @EnvironmentObject private var profileManager: ProfileManager
@@ -35,45 +45,74 @@ struct BrokerView: View {
     @StateObject private var nfcReader = NFCReader()
     
     // Other state properties...
-    private let tagPhrase = "BROKE-IS-GREAT"
+    // private let tagPhrase = "BROKE-IS-GREAT" // No longer needed for generic tag checking here
     
     @State private var showWrongTagAlert = false
-    @State private var showCreateTagAlert = false
-    @State private var nfcWriteSuccess = false
+    // @State private var showCreateTagAlert = false // No longer needed
+    // @State private var nfcWriteSuccess = false // Handled in ProfileFormView
     @State private var attendanceMessage: String?
     @State private var showAttendanceRecords = false
+    @State private var showAddProfileView = false
 
     // State for user app selection
     @State private var showUserAppSelection = false
     @State private var userActivitySelection = FamilyActivitySelection()
 
-    // State for task input SHEET
-    @State private var showTaskInputSheet = false // Replaces showTaskInputAlert
-    // @State private var currentTaskDescription: String = "" // Handled by sheet now
-    @State private var currentRecordId: UUID? = nil
-    @State private var profileToUseForBlocking: Profile? = nil // Still needed to pass to sheet
+    // State for task input SHEET - REMOVED as task selection is now upfront
+    // @State private var showTaskInputSheet = false
+    // @State private var currentRecordId: UUID? = nil // Will become a local var if needed
+    // @State private var profileToUseForBlocking: Profile? = nil // Will be passed directly
+
+    @State private var selectedTaskCategory: TaskCategory? = nil // For pre-scan task selection
+    @State private var showTaskSelectionAlert = false // Alert if task not selected
 
     private var isBlocking: Bool {
         appBlocker.isBlocking
+    }
+
+    private var nfcWriteFeatureDisabled: Bool {
+        #if targetEnvironment(simulator)
+        return false // On simulator, enable the button for UI testing
+        #else
+        return !NFCNDEFReaderSession.readingAvailable // On device, actual availability
+        #endif
     }
     
     var body: some View {
         NavigationView {
             GeometryReader { geometry in
                 ZStack {
-                    VStack(spacing: 0) {
-                        blockOrUnblockButton(geometry: geometry)
+                    VStack(spacing: 0) { // Main container VStack
+                        Spacer() // Pushes content to the center vertically
                         
-                        if !isBlocking {
-                            Divider()
+                        VStack(spacing: 20) { // Inner VStack for centered content
+                            blockOrUnblockButton(geometry: geometry)
                             
-                            // Use the renamed ClassesPicker instead of ProfilesPicker
-                            ClassesPicker(profileManager: profileManager)
-                                .frame(height: geometry.size.height / 2)
-                                .transition(.move(edge: .bottom))
-                                .environmentObject(loginManager)
+                            // Task Picker - visible when not blocking, and now positioned under the button
+                            if !isBlocking {
+                                Section { // Using Section for grouping and potential header
+                                    Picker("Select Task", selection: $selectedTaskCategory) {
+                                        Text("-- Select Task --").tag(nil as TaskCategory?)
+                                        ForEach(TaskCategory.allCases) { category in
+                                            Text(category.rawValue).tag(category as TaskCategory?)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                                .pickerStyle(.menu) // Use a more compact picker style
+                                
+                                // Add ClassesPicker only for moderators
+                                if loginManager.currentUserRole == .moderator {
+                                    ClassesPicker(profileManager: profileManager)
+                                        .frame(maxHeight: geometry.size.height * 0.4)
+                                        .padding(.horizontal)
+                                }
+                            }
                         }
+                        
+                        Spacer() // Pushes content to the center vertically
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // Make VStack fill the ZStack
                     .background(isBlocking ? Color("BlockingBackground") : Color("NonBlockingBackground"))
                     
                     // Attendance message overlay
@@ -98,7 +137,11 @@ struct BrokerView: View {
                 },
                 trailing: HStack { // Use HStack to group trailing items
                     if loginManager.currentUserRole == .moderator {
-                        createTagButton
+                        Button(action: {
+                            showAddProfileView = true
+                        }) {
+                            Image(systemName: "plus.circle")
+                        }
                     }
                     Button(action: { // Logout Button
                         loginManager.logout()
@@ -110,19 +153,19 @@ struct BrokerView: View {
             .alert("Wrong Tag", isPresented: $showWrongTagAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("The scanned tag is not a valid Broker tag.")
+                if loginManager.currentUserRole == .student {
+                    Text("You are not assigned to this space or the tag is invalid.")
+                } else {
+                    Text("The scanned tag is not a valid Broker space tag or is unassigned.")
+                }
             }
-            .alert("Create Broker Tag?", isPresented: $showCreateTagAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Create") { createBrokerTag() }
-            } message: {
-                Text("Hold near an NFC tag to make it a Broker tag.")
-            }
-            .alert("NFC Error", isPresented: $nfcWriteSuccess) { // Assuming nfcWriteSuccess means failure
+            .alert("Select a Task", isPresented: $showTaskSelectionAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Failed to write to NFC tag. Ensure it's close and writable.")
+                Text("Please select a task before starting a session.")
             }
+            // .alert("Create Broker Tag?", isPresented: $showCreateTagAlert) { ... } // Removed
+            // .alert("NFC Error", isPresented: $nfcWriteSuccess) { ... } // Removed
         }
         .animation(.spring(), value: isBlocking)
         .sheet(isPresented: $showAttendanceRecords) {
@@ -139,64 +182,90 @@ struct BrokerView: View {
                     })
             }
         }
-        // Add sheet for task input
-        .sheet(isPresented: $showTaskInputSheet) {
-             // Ensure we have the necessary data before presenting
-             if let recordId = currentRecordId, let profile = profileToUseForBlocking {
-                 TaskInputSheet(
-                     isPresented: $showTaskInputSheet,
-                     recordIdToUpdate: recordId,
-                     profileToUse: profile,
-                     onComplete: { taskDescription in
-                         // This closure is called by the sheet when done
-                         appBlocker.toggleBlocking(for: profile) // Perform blocking
-                         showAttendance("Session started. Task: \(taskDescription ?? "None")")
-                         // Reset state after sheet dismissal
-                         currentRecordId = nil
-                         profileToUseForBlocking = nil
-                     }
-                 )
-                 .environmentObject(attendanceManager) // Pass needed environment objects
-                 .environmentObject(appBlocker)
-             } else {
-                  // Handle error case where sheet is triggered without necessary data
-                  // This shouldn't happen with the current logic, but good to have a fallback
-                  Text("Error presenting task input. Please try again.")
-                     .onAppear { showTaskInputSheet = false } // Dismiss immediately
-             }
+        .sheet(isPresented: $showAddProfileView) {
+            ProfileFormView(profileManager: profileManager) {
+                showAddProfileView = false
+            }
+            .environmentObject(loginManager)
         }
+        // Add sheet for task input - REMOVED
+        // .sheet(isPresented: $showTaskInputSheet) {
+        //      // Ensure we have the necessary data before presenting
+        //      if let recordId = currentRecordId, let profile = profileToUseForBlocking {
+        //          TaskInputSheet(
+        //              isPresented: $showTaskInputSheet,
+        //              recordIdToUpdate: recordId,
+        //              profileToUse: profile,
+        //              onComplete: { taskDescription in
+        //                  // This closure is called by the sheet when done
+        //                  appBlocker.toggleBlocking(for: profile) // Perform blocking
+        //                  showAttendance("Session started. Task: \\(taskDescription ?? "None")")
+        //                  // Reset state after sheet dismissal
+        //                  currentRecordId = nil
+        //                  profileToUseForBlocking = nil
+        //              }
+        //          )
+        //          .environmentObject(attendanceManager) // Pass needed environment objects
+        //          .environmentObject(appBlocker)
+        //      } else {
+        //           // Handle error case where sheet is triggered without necessary data
+        //           // This shouldn't happen with the current logic, but good to have a fallback
+        //           Text("Error presenting task input. Please try again.")
+        //              .onAppear { showTaskInputSheet = false } // Dismiss immediately
+        //      }
+        // }
     }
     
     // The rest of your functions, including scanTag(), blockOrUnblockButton, etc.
     private func scanTag() {
-        nfcReader.scan { payload in
-            if payload == tagPhrase {
-                handleValidScan()
+        nfcReader.scan { scannedPayload in // Renamed payload to scannedPayload for clarity
+            // Attempt to find a profile matching the scanned NFC tag ID
+            if let profile = profileManager.profiles.first(where: { $0.nfcTagID == scannedPayload }) {
+                // If a matching profile is found, proceed with it.
+                handleValidScan(for: profile, scannedTagID: scannedPayload)
             } else {
+                // No profile matches the scanned tag ID.
                 showWrongTagAlert = true
-                NSLog("Wrong Tag! Payload: \(payload)")
+                NSLog("Unknown or unassigned NFC Tag! Payload: \(scannedPayload)")
             }
         }
     }
 
-    private func handleValidScan() {
-        let currentlyBlocking = appBlocker.isBlocking
-        let profile = profileManager.currentProfile
+    private func handleValidScan(for profile: Profile, scannedTagID: String) {
+        // Set the found profile as the current one for ProfileManager
+        profileManager.setCurrentProfile(id: profile.id)
 
-        if currentlyBlocking == false { // STARTING session
-            if profile.userSelectsApps == true && loginManager.currentUserRole == .student {
-                // User needs to select apps first
-                userActivitySelection = FamilyActivitySelection()
-                userActivitySelection.applicationTokens = profile.appTokens
-                userActivitySelection.categoryTokens = profile.categoryTokens
-                showUserAppSelection = true // This will trigger handleUserAppSelectionDone
-            } else {
-                // No user app selection needed, proceed directly to task input/blocking
-                prepareAndStartBlocking(with: profile)
+        let currentlyBlocking = appBlocker.isBlocking
+
+        // Check if user is assigned to this space (for students)
+        if loginManager.currentUserRole == .student {
+            guard let currentUser = loginManager.currentUser,
+                  let assignedUsers = profile.assignedUsernames,
+                  assignedUsers.contains(currentUser) else {
+                showWrongTagAlert = true
+                NSLog("Student \(loginManager.currentUser ?? "unknown") not assigned to space \(profile.name)")
+                return
             }
-        } else { // STOPPING session
-            // Just unblock. No user app selection or task input needed.
-            performToggleBlocking(with: profile)
+        }
+
+        // Display the "Tapped into" message
+        showAttendance("Tapped into: \(profile.name)")
+
+        // Delay further actions slightly to allow the user to see the "Tapped into" message.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Adjust delay as needed
+            if !currentlyBlocking { // STARTING session
+                // Student app selection logic might still apply based on the profile's properties
+                if profile.userSelectsApps == true && loginManager.currentUserRole == .student {
+                    userActivitySelection = FamilyActivitySelection()
+                    userActivitySelection.applicationTokens = profile.appTokens
+                    userActivitySelection.categoryTokens = profile.categoryTokens
+                    showUserAppSelection = true
+                } else {
+                    prepareAndStartBlocking(with: profile)
+                }
+            } else { // STOPPING session
+                performToggleBlocking(with: profile)
+            }
         }
     }
 
@@ -215,20 +284,27 @@ struct BrokerView: View {
         prepareAndStartBlocking(with: userSelectedProfile)
     }
 
-    // New function to handle logic before showing task sheet
+    // New function to handle logic before showing task sheet - Now reworked
     private func prepareAndStartBlocking(with profileToUse: Profile) {
-         if let currentUser = loginManager.currentUser {
-            currentRecordId = attendanceManager.logAttendanceStart(for: profileManager.currentProfile, user: currentUser)
-             if currentRecordId != nil {
-                 profileToUseForBlocking = profileToUse
-                 // Show task input SHEET
-                 showTaskInputSheet = true // Changed from showTaskInputAlert
-             } else {
-                 showAttendance("Failed to start session. Already active?")
-             }
-        } else {
+         guard let currentUser = loginManager.currentUser else {
              showAttendance("Error: Could not identify user.")
-             // attendanceManager.logAttendanceStart(for: profileManager.currentProfile, user: "Unknown") 
+             return
+         }
+        guard let task = selectedTaskCategory else {
+            // This should be caught by handleButtonTap, but as a safeguard
+            showTaskSelectionAlert = true
+            showAttendance("Please select a task.")
+            return
+        }
+
+        if let recordId = attendanceManager.logAttendanceStart(for: profileToUse, user: currentUser) {
+            attendanceManager.updateTaskCategory(for: recordId, category: task)
+            appBlocker.toggleBlocking(for: profileToUse) // Perform blocking now
+            showAttendance("Session started for \\(profileToUse.name). Task: \\(task.rawValue)")
+            // Consider resetting selectedTaskCategory here if desired after successful start
+            // selectedTaskCategory = nil
+        } else {
+            showAttendance("Failed to start session. Already active for \\(profileToUse.name)?")
         }
     }
 
@@ -267,6 +343,11 @@ struct BrokerView: View {
     private func handleButtonTap() async {
         await appBlocker.requestAuthorization()
         if appBlocker.isAuthorized {
+            // If starting a session, ensure a task is selected
+            if !isBlocking && selectedTaskCategory == nil {
+                showTaskSelectionAlert = true
+                return
+            }
             scanTag()
         } else {
             // Handle authorization denial (e.g., show alert)
@@ -284,41 +365,22 @@ struct BrokerView: View {
                 .transition(.scale)
             
             Button(action: {
-                // Move Task outside withAnimation
-                // The animations should still work due to state changes
                 Task {
                     await handleButtonTap()
                 }
-                // Apply animation to any immediate synchronous UI changes if needed,
-                // but the Task itself runs separately.
-                // If no immediate changes, withAnimation might not be needed here.
-                // withAnimation(.spring()) {}
             }) {
                 Image(isBlocking ? "RedIcon" : "GreenIcon")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(height: geometry.size.height / 3)
+                    // Make the logo smaller
+                    .frame(height: geometry.size.height * 0.25) // Reduced size, e.g., 25% of screen height
             }
             .transition(.scale)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(height: isBlocking ? geometry.size.height : geometry.size.height / 2)
+        // This VStack (for the button content) should center itself based on parent spacers
+        // No need for .frame(maxWidth: .infinity, maxHeight: .infinity) here anymore
         .animation(.spring(), value: isBlocking)
     }
     
-    private var createTagButton: some View {
-        Button(action: {
-            showCreateTagAlert = true
-        }) {
-            Image(systemName: "plus")
-        }
-        .disabled(!NFCNDEFReaderSession.readingAvailable)
-    }
-    
-    private func createBrokerTag() {
-        nfcReader.write(tagPhrase) { success in
-            nfcWriteSuccess = !success
-            showCreateTagAlert = false
-        }
-    }
+    // private var createTagButton: some View { ... } // Removed
 }

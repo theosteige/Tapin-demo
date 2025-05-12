@@ -76,8 +76,8 @@ class ProfileManager: ObservableObject {
         UserDefaults.standard.set(currentProfileId?.uuidString, forKey: "currentProfileId")
     }
     
-    func addProfile(name: String, icon: String = "bell.slash") {
-        let newProfile = Profile(name: name, appTokens: [], categoryTokens: [], icon: icon, userSelectsApps: false)
+    func addProfile(name: String, icon: String = "bell.slash", nfcTagID: String? = nil) {
+        let newProfile = Profile(name: name, appTokens: [], categoryTokens: [], icon: icon, userSelectsApps: false, nfcTagID: nfcTagID)
         profiles.append(newProfile)
         currentProfileId = newProfile.id
         saveProfiles()
@@ -153,7 +153,8 @@ class ProfileManager: ObservableObject {
         categoryTokens: Set<ActivityCategoryToken>? = nil,
         icon: String? = nil,
         assignedUsernames: [String]? = nil,
-        userSelectsApps: Bool? = nil
+        userSelectsApps: Bool? = nil,
+        nfcTagID: String? = nil
     ) {
         if let index = profiles.firstIndex(where: { $0.id == id }) {
             if let name = name {
@@ -174,6 +175,17 @@ class ProfileManager: ObservableObject {
             if let userSelectsApps = userSelectsApps {
                 profiles[index].userSelectsApps = userSelectsApps
             }
+            if nfcTagID != nil {
+                profiles[index].nfcTagID = nfcTagID
+            } else if name != nil || appTokens != nil || categoryTokens != nil || icon != nil || assignedUsernames != nil || userSelectsApps != nil {
+                // If other fields are being updated, but nfcTagID is not explicitly passed (remains nil from signature),
+                // we don't want to accidentally wipe an existing nfcTagID. So only update nfcTagID if it's explicitly part of the update.
+                // However, if the intention IS to clear it, the caller should pass an empty string or a specific marker.
+                // For this iteration, if nfcTagID parameter is nil, we preserve the existing value.
+                // This else-if block is a bit complex. A better approach might be to have a separate function to update *only* nfcTagID
+                // or make the update more explicit about clearing.
+                // For now, we only set nfcTagID if the nfcTagID parameter is not nil.
+            }
             
             if currentProfileId == id {
                 currentProfileId = profiles[index].id
@@ -185,7 +197,7 @@ class ProfileManager: ObservableObject {
     
     private func ensureDefaultProfile() {
         if profiles.isEmpty {
-            let defaultProfile = Profile(name: "Default", appTokens: [], categoryTokens: [], icon: "bell.slash", userSelectsApps: false)
+            let defaultProfile = Profile(name: "Default", appTokens: [], categoryTokens: [], icon: "bell.slash", userSelectsApps: false, nfcTagID: nil)
             profiles.append(defaultProfile)
             currentProfileId = defaultProfile.id
             saveProfiles()
@@ -208,13 +220,14 @@ struct Profile: Identifiable, Codable {
     var icon: String // New property for icon
     var assignedUsernames: [String]? // Added field for assigned usernames
     var userSelectsApps: Bool? = false // NEW: Determines who selects apps (default false)
+    var nfcTagID: String? // Unique ID of the NFC tag associated with this profile
 
     var isDefault: Bool {
         name == "Default"
     }
 
     // New initializer to support default icon and assignedUsernames
-    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", assignedUsernames: [String]? = nil, userSelectsApps: Bool? = false) { // Added assignedUsernames and userSelectsApps
+    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", assignedUsernames: [String]? = nil, userSelectsApps: Bool? = false, nfcTagID: String? = nil) { // Added assignedUsernames and userSelectsApps
         self.id = UUID()
         self.name = name
         self.appTokens = appTokens
@@ -222,5 +235,6 @@ struct Profile: Identifiable, Codable {
         self.icon = icon
         self.assignedUsernames = assignedUsernames // Initialize assignedUsernames
         self.userSelectsApps = userSelectsApps ?? false // Initialize userSelectsApps, defaulting to false
+        self.nfcTagID = nfcTagID // Initialize nfcTagID
     }
 }

@@ -23,10 +23,12 @@
 import SwiftUI
 import SFSymbolsPicker
 import FamilyControls
+import CoreNFC
 
 struct ProfileFormView: View {
     @EnvironmentObject var loginManager: LoginManager
     @ObservedObject var profileManager: ProfileManager
+    @StateObject private var nfcReader = NFCReader()
     @State private var profileName: String
     @State private var profileIcon: String
     @State private var assignedUsernamesString: String
@@ -35,6 +37,10 @@ struct ProfileFormView: View {
     @State private var activitySelection: FamilyActivitySelection
     @State private var showDeleteConfirmation = false
     @State private var userCanSelectApps: Bool
+    @State private var nfcTagIDString: String
+    @State private var showNFCAssignAlert = false
+    @State private var nfcWriteErrorAlert = false
+    @State private var nfcStatusMessage: String = "No NFC tag assigned."
     let profile: Profile?
     let onDismiss: () -> Void
     
@@ -46,7 +52,14 @@ struct ProfileFormView: View {
         _profileIcon = State(initialValue: profile?.icon ?? "bell.slash")
         _assignedUsernamesString = State(initialValue: profile?.assignedUsernames?.joined(separator: ", ") ?? "")
         _userCanSelectApps = State(initialValue: profile?.userSelectsApps ?? false)
+        _nfcTagIDString = State(initialValue: profile?.nfcTagID ?? "")
         
+        if let tagId = profile?.nfcTagID, !tagId.isEmpty {
+            _nfcStatusMessage = State(initialValue: "Tag ID: \(tagId)")
+        } else {
+            _nfcStatusMessage = State(initialValue: "No NFC tag assigned.")
+        }
+
         var selection = FamilyActivitySelection()
         selection.applicationTokens = profile?.appTokens ?? []
         selection.categoryTokens = profile?.categoryTokens ?? []
@@ -76,6 +89,19 @@ struct ProfileFormView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                }
+                
+                Section(header: Text("NFC Tag Assignment")) {
+                    Text(nfcStatusMessage)
+                        .font(.caption)
+                        .foregroundColor(nfcTagIDString.isEmpty ? .secondary : .primary)
+                    
+                    Button(action: {
+                        assignNFCTag()
+                    }) {
+                        Text(nfcTagIDString.isEmpty ? "Assign NFC Tag to this Space" : "Re-assign NFC Tag")
+                    }
+                    .disabled(!nfcReaderFeatureAvailable)
                 }
                 
                 if loginManager.currentUserRole == .moderator {
@@ -157,6 +183,49 @@ struct ProfileFormView: View {
                     secondaryButton: .cancel()
                 )
             }
+            .alert("NFC Tag Operation", isPresented: $showNFCAssignAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Hold your iPhone near an NFC tag to assign it to this space. A unique ID will be written to the tag.")
+            }
+            .alert("NFC Write Error", isPresented: $nfcWriteErrorAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Failed to write to NFC tag. Please ensure the tag is close and writable.")
+            }
+        }
+    }
+    
+    private var nfcReaderFeatureAvailable: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return NFCNDEFReaderSession.readingAvailable
+        #endif
+    }
+    
+    private func assignNFCTag() {
+        guard nfcReaderFeatureAvailable else {
+            nfcStatusMessage = "NFC writing is not available on this device."
+            return
+        }
+
+        let newTagID = "BROKE-SPACE-\(UUID().uuidString)"
+        showNFCAssignAlert = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            nfcReader.write(newTagID) { success in
+                showNFCAssignAlert = false
+                if success {
+                    nfcTagIDString = newTagID
+                    nfcStatusMessage = "Tag ID: \(newTagID)"
+                    print("Successfully wrote NFC Tag ID: \(newTagID)")
+                } else {
+                    nfcWriteErrorAlert = true
+                    nfcStatusMessage = "Failed to assign NFC tag."
+                    print("Failed to write NFC Tag ID: \(newTagID)")
+                }
+            }
         }
     }
     
@@ -174,7 +243,8 @@ struct ProfileFormView: View {
                 categoryTokens: activitySelection.categoryTokens,
                 icon: profileIcon,
                 assignedUsernames: usernames,
-                userSelectsApps: userCanSelectApps
+                userSelectsApps: userCanSelectApps,
+                nfcTagID: nfcTagIDString.isEmpty ? nil : nfcTagIDString
             )
         } else {
             let newProfile = Profile(
@@ -183,7 +253,8 @@ struct ProfileFormView: View {
                 categoryTokens: activitySelection.categoryTokens,
                 icon: profileIcon,
                 assignedUsernames: usernames,
-                userSelectsApps: userCanSelectApps
+                userSelectsApps: userCanSelectApps,
+                nfcTagID: nfcTagIDString.isEmpty ? nil : nfcTagIDString
             )
             profileManager.addProfile(newProfile: newProfile)
         }
