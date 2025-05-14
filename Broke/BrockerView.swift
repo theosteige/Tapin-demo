@@ -90,18 +90,33 @@ struct BrokerView: View {
                             
                             // Task Picker - visible when not blocking, and now positioned under the button
                             if !isBlocking {
-                                Section { // Using Section for grouping and potential header
-                                    Picker("Select Task", selection: $selectedTaskCategory) {
-                                        Text("-- Select Task --").tag(nil as TaskCategory?)
-                                        ForEach(TaskCategory.allCases) { category in
-                                            Text(category.rawValue).tag(category as TaskCategory?)
+                                VStack(spacing: 16) {
+                                    Text("Select Your Task Before Tapping In")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    // Custom task selector
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 12) {
+                                            ForEach(TaskCategory.allCases) { category in
+                                                TaskCategoryButton(
+                                                    category: category,
+                                                    isSelected: selectedTaskCategory == category,
+                                                    action: {
+                                                        withAnimation(.spring()) {
+                                                            selectedTaskCategory = category
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
+                                        .padding(.horizontal)
                                     }
-                                    .padding(.horizontal)
+                                    .frame(height: 120) // Fixed height for the scroll view
                                 }
-                                .pickerStyle(.menu) // Use a more compact picker style
+                                .padding(.vertical)
                                 
-                                // Add ClassesPicker only for moderators
+                                // Only show ClassesPicker for moderators
                                 if loginManager.currentUserRole == .moderator {
                                     ClassesPicker(profileManager: profileManager)
                                         .frame(maxHeight: geometry.size.height * 0.4)
@@ -153,11 +168,7 @@ struct BrokerView: View {
             .alert("Wrong Tag", isPresented: $showWrongTagAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                if loginManager.currentUserRole == .student {
-                    Text("You are not assigned to this space or the tag is invalid.")
-                } else {
-                    Text("The scanned tag is not a valid Broker space tag or is unassigned.")
-                }
+                Text("The scanned tag is not a valid Broker space tag or is unassigned.") // Updated message
             }
             .alert("Select a Task", isPresented: $showTaskSelectionAlert) {
                 Button("OK", role: .cancel) { }
@@ -188,32 +199,6 @@ struct BrokerView: View {
             }
             .environmentObject(loginManager)
         }
-        // Add sheet for task input - REMOVED
-        // .sheet(isPresented: $showTaskInputSheet) {
-        //      // Ensure we have the necessary data before presenting
-        //      if let recordId = currentRecordId, let profile = profileToUseForBlocking {
-        //          TaskInputSheet(
-        //              isPresented: $showTaskInputSheet,
-        //              recordIdToUpdate: recordId,
-        //              profileToUse: profile,
-        //              onComplete: { taskDescription in
-        //                  // This closure is called by the sheet when done
-        //                  appBlocker.toggleBlocking(for: profile) // Perform blocking
-        //                  showAttendance("Session started. Task: \\(taskDescription ?? "None")")
-        //                  // Reset state after sheet dismissal
-        //                  currentRecordId = nil
-        //                  profileToUseForBlocking = nil
-        //              }
-        //          )
-        //          .environmentObject(attendanceManager) // Pass needed environment objects
-        //          .environmentObject(appBlocker)
-        //      } else {
-        //           // Handle error case where sheet is triggered without necessary data
-        //           // This shouldn't happen with the current logic, but good to have a fallback
-        //           Text("Error presenting task input. Please try again.")
-        //              .onAppear { showTaskInputSheet = false } // Dismiss immediately
-        //      }
-        // }
     }
     
     // The rest of your functions, including scanTag(), blockOrUnblockButton, etc.
@@ -237,13 +222,12 @@ struct BrokerView: View {
 
         let currentlyBlocking = appBlocker.isBlocking
 
-        // Check if user is assigned to this space (for students)
+        // Check if user is assigned to this space
         if loginManager.currentUserRole == .student {
             guard let currentUser = loginManager.currentUser,
                   let assignedUsers = profile.assignedUsernames,
                   assignedUsers.contains(currentUser) else {
-                showWrongTagAlert = true
-                NSLog("Student \(loginManager.currentUser ?? "unknown") not assigned to space \(profile.name)")
+                showAttendance("You are not assigned to this space")
                 return
             }
         }
@@ -252,7 +236,7 @@ struct BrokerView: View {
         showAttendance("Tapped into: \(profile.name)")
 
         // Delay further actions slightly to allow the user to see the "Tapped into" message.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Adjust delay as needed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             if !currentlyBlocking { // STARTING session
                 // Student app selection logic might still apply based on the profile's properties
                 if profile.userSelectsApps == true && loginManager.currentUserRole == .student {
@@ -300,11 +284,11 @@ struct BrokerView: View {
         if let recordId = attendanceManager.logAttendanceStart(for: profileToUse, user: currentUser) {
             attendanceManager.updateTaskCategory(for: recordId, category: task)
             appBlocker.toggleBlocking(for: profileToUse) // Perform blocking now
-            showAttendance("Session started for \\(profileToUse.name). Task: \\(task.rawValue)")
+            showAttendance("Tapped into: \(profileToUse.name). Task: \(task.rawValue)")
             // Consider resetting selectedTaskCategory here if desired after successful start
             // selectedTaskCategory = nil
         } else {
-            showAttendance("Failed to start session. Already active for \\(profileToUse.name)?")
+            showAttendance("Failed to start session. Already active for \(profileToUse.name)?")
         }
     }
 
@@ -343,23 +327,33 @@ struct BrokerView: View {
     private func handleButtonTap() async {
         await appBlocker.requestAuthorization()
         if appBlocker.isAuthorized {
-            // If starting a session, ensure a task is selected
-            if !isBlocking && selectedTaskCategory == nil {
-                showTaskSelectionAlert = true
-                return
+            if isBlocking {
+                // If already blocking, just stop blocking
+                if let currentUser = loginManager.currentUser {
+                    attendanceManager.logAttendanceEnd(for: profileManager.currentProfile, user: currentUser)
+                } else {
+                    attendanceManager.logAttendanceEnd(for: profileManager.currentProfile, user: "Unknown")
+                }
+                appBlocker.toggleBlocking(for: profileManager.currentProfile)
+                showAttendance("See you later")
+            } else {
+                // If starting a session, ensure a task is selected and scan NFC
+                if selectedTaskCategory == nil {
+                    showTaskSelectionAlert = true
+                    return
+                }
+                scanTag()
             }
-            scanTag()
         } else {
-            // Handle authorization denial (e.g., show alert)
+            // Handle authorization denial
             print("Authorization required to block apps.")
-            // You might want to show an alert here
         }
     }
     
     @ViewBuilder
     private func blockOrUnblockButton(geometry: GeometryProxy) -> some View {
         VStack(spacing: 8) {
-            Text(isBlocking ? "Tap to unblock" : "Tap to block")
+            Text(isBlocking ? "Tap the screen to unblock" : "Tap and scan to block")
                 .font(.caption)
                 .opacity(0.75)
                 .transition(.scale)
@@ -372,15 +366,75 @@ struct BrokerView: View {
                 Image(isBlocking ? "RedIcon" : "GreenIcon")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    // Make the logo smaller
-                    .frame(height: geometry.size.height * 0.25) // Reduced size, e.g., 25% of screen height
+                    .frame(height: geometry.size.height * 0.25)
             }
             .transition(.scale)
         }
-        // This VStack (for the button content) should center itself based on parent spacers
-        // No need for .frame(maxWidth: .infinity, maxHeight: .infinity) here anymore
         .animation(.spring(), value: isBlocking)
     }
     
     // private var createTagButton: some View { ... } // Removed
+}
+
+// Add this new view at the end of the file, before the last closing brace
+struct TaskCategoryButton: View {
+    let category: TaskCategory
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: iconName)
+                    .font(.system(size: 24))
+                    .foregroundColor(isSelected ? .white : .primary)
+                
+                Text(category.rawValue)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(isSelected ? .white : .primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(width: 90, height: 100)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isSelected ? Color.accentColor : Color(.systemGray6))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .shadow(color: isSelected ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.1),
+                   radius: isSelected ? 8 : 4,
+                   x: 0,
+                   y: 2)
+        }
+    }
+    
+    private var iconName: String {
+        switch category {
+        case .math:
+            return "function"
+        case .science:
+            return "atom"
+        case .english:
+            return "text.book.closed.fill"
+        case .history:
+            return "clock.fill"
+        case .computerScience:
+            return "laptopcomputer"
+        case .art:
+            return "paintpalette.fill"
+        case .music:
+            return "music.note"
+        case .physicalEducation:
+            return "figure.run"
+        case .foreignLanguage:
+            return "globe"
+        case .other:
+            return "ellipsis.circle.fill"
+        }
+    }
 }
