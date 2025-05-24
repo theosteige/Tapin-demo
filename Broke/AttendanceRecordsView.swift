@@ -30,6 +30,7 @@ struct TaskDurationChartData: Identifiable {
 
 struct AttendanceRecordsView: View {
     @EnvironmentObject var attendanceManager: AttendanceManager
+    @EnvironmentObject var loginManager: LoginManager
     @State private var selectedDate: Date?
     // Add state variables to control expansion if needed, or rely on default DisclosureGroup state
     // @State private var isMonthlyOverviewExpanded: Bool = true
@@ -37,23 +38,25 @@ struct AttendanceRecordsView: View {
     // @State private var isDailyTotalsExpanded: Bool = true
     // @State private var isOverallTotalsExpanded: Bool = true
 
-    // Group records by day (start of day)
+    // Group records by day (start of day) - Filtered for current user
     private var recordsByDay: [Date: [AttendanceRecord]] {
-        Dictionary(grouping: attendanceManager.records) { record in
-            Calendar.current.startOfDay(for: record.startTime) // Use startTime for grouping
+        let userRecords = attendanceManager.records.filter { record in
+            record.username == loginManager.currentUser
+        }
+        return Dictionary(grouping: userRecords) { record in
+            Calendar.current.startOfDay(for: record.startTime)
         }
     }
 
-    // Calculate aggregated task durations for the selected date
+    // Calculate aggregated task durations for the selected date - Already filtered by recordsByDay
     private var taskDurationsForSelectedDate: [TaskCategory: TimeInterval] {
         guard let date = selectedDate, let recordsForDay = recordsByDay[date] else {
             return [:]
         }
         var durations: [TaskCategory: TimeInterval] = [:]
         for record in recordsForDay {
-            // Use taskCategory, check it's not nil
             guard let category = record.taskCategory, let endTime = record.endTime else {
-                continue // Skip records without a category or end time
+                continue
             }
             let duration = endTime.timeIntervalSince(record.startTime)
             durations[category, default: 0] += duration
@@ -61,23 +64,24 @@ struct AttendanceRecordsView: View {
         return durations
     }
     
-    // Calculate aggregated task durations across ALL records, including tasks with 0 time
+    // Calculate aggregated task durations across ALL records - Filtered for current user
     private var totalTaskDurations: [TaskCategory: TimeInterval] {
-        // Initialize durations dictionary with all possible task categories set to 0
         var durations = Dictionary(uniqueKeysWithValues: TaskCategory.allCases.map { ($0, 0.0) })
         
-        for record in attendanceManager.records {
-             // Use taskCategory, check it's not nil
-             guard let category = record.taskCategory, let endTime = record.endTime else {
-                 continue // Skip records without a category or end time
-             }
-             // Only add duration if the category exists in our predefined list (safety check)
-             if durations.keys.contains(category) {
-                 let duration = endTime.timeIntervalSince(record.startTime)
-                 durations[category, default: 0] += duration
-             }
-         }
-         return durations
+        let userRecords = attendanceManager.records.filter { record in
+            record.username == loginManager.currentUser
+        }
+        
+        for record in userRecords {
+            guard let category = record.taskCategory, let endTime = record.endTime else {
+                continue
+            }
+            if durations.keys.contains(category) {
+                let duration = endTime.timeIntervalSince(record.startTime)
+                durations[category, default: 0] += duration
+            }
+        }
+        return durations
     }
 
     // Prepare data for the chart, filtering out zero-duration tasks for visual clarity
@@ -183,56 +187,70 @@ struct AttendanceRecordsView: View {
 
                 // --- Collapsible Daily Detail Section --- 
                 if let date = selectedDate, let records = recordsByDay[date] {
-                    DisclosureGroup("Sessions for \(date, formatter: DateFormatter.dateOnlyFormatter)") { // Wrap content in DisclosureGroup
-                        List {
-                           ForEach(records) { record in
-                               VStack(alignment: .leading) {
-                                   Text("User: \(record.username)")
-                                   Text("Class: \(record.className)")
-                                   // Display category rawValue
-                                   Text("Task: \(record.taskCategory?.rawValue ?? "N/A")") 
-                                   HStack {
-                                        Text("Start: \(record.startTime, formatter: DateFormatter.timeOnlyFormatter)")
-                                        if let endTime = record.endTime {
-                                            Text("End: \(endTime, formatter: DateFormatter.timeOnlyFormatter)")
-                                        } else {
-                                            Text("End: (In Progress)").foregroundColor(.secondary)
-                                        }
-                                   }
-                                   .font(.caption).foregroundColor(.secondary)
-                               }
-                               .padding(.vertical, 2)
-                           }
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Sessions for \(date, formatter: DateFormatter.dateOnlyFormatter)")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        ForEach(records) { record in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: "person.fill")
+                                        .foregroundColor(.accentColor)
+                                    Text(record.username)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
+                                
+                                HStack {
+                                    Image(systemName: "building.2.fill")
+                                        .foregroundColor(.accentColor)
+                                    Text(record.className)
+                                        .font(.subheadline)
+                                }
+                                
+                                HStack {
+                                    Image(systemName: "book.fill")
+                                        .foregroundColor(.accentColor)
+                                    Text(record.taskCategory?.rawValue ?? "N/A")
+                                        .font(.subheadline)
+                                }
+                                
+                                HStack {
+                                    Image(systemName: "clock.fill")
+                                        .foregroundColor(.accentColor)
+                                    Text("\(record.startTime, formatter: DateFormatter.timeOnlyFormatter) - \(record.endTime.map { DateFormatter.timeOnlyFormatter.string(from: $0) } ?? "In Progress")")
+                                        .font(.subheadline)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                            .padding(.horizontal)
                         }
-                        .frame(height: CGFloat(records.count) * 85) // Adjust height slightly
-                        .listStyle(.plain)
-                        .padding(.horizontal)
+                        
+                        // Daily task totals
+                        let dailyTaskDurations = taskDurationsForSelectedDate
+                        if !dailyTaskDurations.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Daily Task Totals")
+                                    .font(.headline)
+                                    .padding(.horizontal)
+                                
+                                ForEach(dailyTaskDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
+                                    HStack {
+                                        Text(category.rawValue)
+                                        Spacer()
+                                        Text(durationFormatter.string(from: totalDuration) ?? "--")
+                                    }
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                            .padding(.vertical)
+                        }
                     }
-                    .padding(.horizontal) // Apply padding to the DisclosureGroup
                     .transition(.opacity.combined(with: .move(edge: .top)))
-                    
-                    // --- Collapsible Daily Task Duration Section --- 
-                    let dailyTaskDurations = taskDurationsForSelectedDate
-                    if !dailyTaskDurations.isEmpty {
-                         DisclosureGroup("Task Totals for \(date, formatter: DateFormatter.dateOnlyFormatter)") { // Wrap content in DisclosureGroup
-                              List {
-                                   // Sort by category rawValue for consistent order
-                                   ForEach(dailyTaskDurations.sorted(by: { $0.key.rawValue < $1.key.rawValue }), id: \.key) { category, totalDuration in
-                                        HStack {
-                                             // Display category rawValue
-                                             Text(category.rawValue)
-                                             Spacer()
-                                             Text(durationFormatter.string(from: totalDuration) ?? "--")
-                                        }
-                                   }
-                              }
-                              .frame(height: CGFloat(dailyTaskDurations.count) * 45) // Adjust height
-                              .listStyle(.plain)
-                              .padding(.horizontal)
-                         }
-                         .padding(.horizontal) // Apply padding to the DisclosureGroup
-                         .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
                 }
                 
                 // --- Collapsible Overall Task Duration Section ---
@@ -317,11 +335,9 @@ struct DayCell: View {
 
     var body: some View {
         Rectangle()
-            .fill(hasRecord ? Color(.systemMint) : Color(UIColor.systemGray5)) // Use a system gray for better light/dark mode adaptivity
-            .frame(height: 30) // Adjust size as needed
+            .fill(hasRecord ? Color(red: 0.0, green: 1.0, blue: 0.5) : Color(UIColor.systemGray5)) // Neon green color
+            .frame(height: 30)
             .cornerRadius(3)
-            // Optional: Add day number or other indicators
-            // .overlay(Text("\(Calendar.current.component(.day, from: day))").font(.caption2))
     }
 }
 
