@@ -18,8 +18,15 @@ import SwiftUI
 
 // Define predefined task categories
 enum TaskCategory: String, CaseIterable, Identifiable, Codable {
-    case schoolwork = "Schoolwork"
-    case personalWork = "Personal Work"
+    case math = "Math"
+    case science = "Science"
+    case english = "English"
+    case history = "History"
+    case computerScience = "Computer Science"
+    case art = "Art"
+    case music = "Music"
+    case physicalEducation = "Physical Education"
+    case foreignLanguage = "Foreign Language"
     case other = "Other"
     
     var id: String { self.rawValue } // Conform to Identifiable

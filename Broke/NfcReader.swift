@@ -38,9 +38,13 @@ class NFCReader: NSObject, ObservableObject, NFCNDEFReaderSessionDelegate {
     
     func scan(completion: @escaping (String) -> Void) {
         #if targetEnvironment(simulator)
-        // Simulate a valid NFC scan by returning the correct tag phrase after a short delay
+        // Simulate a valid NFC scan by returning a unique space tag ID after a short delay
+        // In a real test setup, you might want to cycle through a few known test tag IDs
+        // or have a way to input which tag ID the simulator should mock.
+        let simulatedSpaceTagID = "BROKE-SPACE-\(UUID().uuidString)" // Example of a unique ID
+        NSLog("NFCReader: Simulating scan of '\\(simulatedSpaceTagID)' on Simulator")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            completion("BROKE-IS-GREAT")
+            completion(simulatedSpaceTagID)
         }
         #else
         self.onScanComplete = completion
@@ -51,10 +55,18 @@ class NFCReader: NSObject, ObservableObject, NFCNDEFReaderSessionDelegate {
 
     
     func write(_ text: String, completion: @escaping (Bool) -> Void) {
+        #if targetEnvironment(simulator)
+        NSLog("NFCReader: Simulating successful write of '\(text)' on Simulator")
+        // Simulate a small delay and success
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            completion(true)
+        }
+        #else
         self.onWriteComplete = completion
         self.textToWrite = text
         self.isWriting = true
         startSession()
+        #endif
     }
     
     private func startSession() {
